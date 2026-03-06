@@ -328,6 +328,12 @@ AuthProvider (wraps entire app)
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the API service layer and Auth Context with token management. Save your work and take a break.
+> When you return, you'll build the protected route component and auth pages.
+
+---
+
 ## Step 4: Build the ProtectedRoute Component
 
 **Where?** `client/src/components/ProtectedRoute.tsx`
@@ -539,6 +545,12 @@ export function RegisterPage() {
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the Login and Register pages with form handling and error display. Save your work and take a break.
+> When you return, you'll build the Notes page with full CRUD functionality.
+
+---
+
 ## Step 7: Build the Notes Page
 
 **Where?** `client/src/pages/NotesPage.tsx`
@@ -733,6 +745,12 @@ export function NotesPage() {
   );
 }
 ```
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the Notes page with create, edit, and delete functionality. Save your work and take a break.
+> When you return, you'll wire everything together with App routing and add styles.
 
 ---
 

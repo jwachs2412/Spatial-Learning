@@ -338,6 +338,12 @@ User could send:                      We check:
 
 ---
 
+> [!TIP]
+> **Session Break** — You've defined types, built the Express server, and written the API routes with validation. Save your work and take a break.
+> When you return, you'll test the backend with curl and commit your progress.
+
+---
+
 ## Step 4: Test the Backend
 
 ### Start the Server

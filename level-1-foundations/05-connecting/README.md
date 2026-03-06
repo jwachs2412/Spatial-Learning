@@ -220,6 +220,12 @@ Let's trace the entire request lifecycle in detail:
 
 ---
 
+> [!TIP]
+> **Session Break** — You've connected the frontend and backend and traced the full request lifecycle. Save your work and take a break.
+> When you return, you'll explore DevTools, optionally configure a proxy, and push to GitHub.
+
+---
+
 ## Step 4: Open the Browser DevTools
 
 This is one of the most important development skills. The browser's DevTools let you see exactly what's happening.

@@ -281,6 +281,12 @@ npx vitest run src/features/filters
 
 ---
 
+> [!TIP]
+> **Session Break** — You've written unit tests for utility functions and Redux slices. Save your work and take a break.
+> When you return, you'll write component tests with React Testing Library and API tests with Supertest.
+
+---
+
 ## Part 2: Component Tests (React Testing Library)
 
 Component tests render React components and verify they display correct content and respond to user interactions.
@@ -492,6 +498,12 @@ Run all frontend tests:
 ```bash
 npx vitest run
 ```
+
+---
+
+> [!TIP]
+> **Session Break** — You've written component tests for OverviewCards and FilterBar with user interactions. Save your work and take a break.
+> When you return, you'll write API integration tests with Supertest.
 
 ---
 

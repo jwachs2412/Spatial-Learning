@@ -127,6 +127,24 @@ collab-board/
 
 ---
 
+## Session Guide
+
+Level 5 takes approximately **14–18 sessions** (30–60 minutes each).
+
+| Lesson | Sessions | Notes |
+|--------|----------|-------|
+| 01 — Orientation | 1 | Read and absorb in one sitting |
+| 02 — Project Setup | 2 | Break after backend scaffold, before frontend deps |
+| 03 — Database | 2 | Break after schema, before seed script |
+| 04 — Backend | 4 | Breaks after auth module, after boards module, and after cards module |
+| 05 — Frontend | 5 | Breaks after auth slice, after board slice, after board view components, and after ProtectedRoute |
+| 06 — Drag & Drop | 3 | Breaks after SortableCard setup and after optimistic update pattern |
+| 07 — CI/CD & Monitoring | 2 | Break after CI pipeline, before Sentry |
+| 08 — Deployment | 1 | Complete in one sitting |
+| 09 — Growth Review | 1 | Complete in one sitting |
+
+Look for **Session Break** markers inside each lesson — they tell you exactly when to pause.
+
 ## Learning Path
 
 | Step | Topic | What You Build |

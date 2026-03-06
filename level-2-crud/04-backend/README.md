@@ -395,6 +395,12 @@ For DELETE operations, the standard response is 204 (No Content) — "I did what
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built all 5 project routes with parameterized queries and validation. Save your work and take a break.
+> When you return, you'll build the task routes and wire everything into the server entry point.
+
+---
+
 ## Step 4: Build Task Routes
 
 **Where?** `server/src/routes/tasks.ts`
@@ -600,6 +606,12 @@ Notice something about the task routes: some use `/projects/:projectId/tasks` an
 | `DELETE /tasks/:id` | "Delete this task" — the task ID is enough |
 
 This is a common REST pattern: use nested routes when you need the parent context, flat routes when the resource ID is sufficient.
+
+---
+
+> [!TIP]
+> **Session Break** — You've built all project and task routes — the full CRUD API. Save your work and take a break.
+> When you return, you'll wire everything into the server entry point and test every endpoint.
 
 ---
 

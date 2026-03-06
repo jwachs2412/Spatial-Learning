@@ -247,6 +247,12 @@ export default pool;
 
 ---
 
+> [!TIP]
+> **Session Break** — You've designed the 6-table schema with foreign keys, many-to-many relationships, and cascade rules. Save your work and take a break.
+> When you return, you'll write the seed script and verify the data with SQL queries.
+
+---
+
 ## Step 3: Seed Script
 
 The seed creates demo users, boards, lists, cards, and comments.

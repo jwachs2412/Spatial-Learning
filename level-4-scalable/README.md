@@ -135,6 +135,24 @@ data-dash/
 
 ---
 
+## Session Guide
+
+Level 4 takes approximately **13–16 sessions** (30–60 minutes each).
+
+| Lesson | Sessions | Notes |
+|--------|----------|-------|
+| 01 — Orientation | 1 | Read and absorb in one sitting |
+| 02 — Project Setup | 2 | Break after backend deps, before frontend deps |
+| 03 — Backend | 3 | Breaks after middleware stack and after service layer |
+| 04 — State Management | 3 | Breaks after filtersSlice and after analyticsSlice |
+| 05 — Frontend | 4 | Breaks after FilterBar, after charts, and after EventsTable |
+| 06 — Testing | 3 | Breaks after unit tests and after component tests |
+| 07 — Performance | 2 | Break after memoization, before error boundaries |
+| 08 — Deployment | 1 | Complete in one sitting |
+| 09 — Growth Review | 1 | Complete in one sitting |
+
+Look for **Session Break** markers inside each lesson — they tell you exactly when to pause.
+
 ## Learning Path
 
 | Step | Topic | What You Build |

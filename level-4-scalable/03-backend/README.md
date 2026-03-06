@@ -516,6 +516,12 @@ Key details:
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the complete middleware stack with logging, rate limiting, validation, and error handling. Save your work and take a break.
+> When you return, you'll build the service layer with SQL queries and the analytics routes.
+
+---
+
 ## Step 5: Service Layer
 
 The service layer contains all SQL queries and business logic. Routes call services; services call the database. This separation means:
@@ -776,6 +782,12 @@ export async function getEvents(
 
 > [!WARNING]
 > **All query parameters use `$1`, `$2` placeholders.** Never concatenate user input into SQL strings. The `buildWhereClause` helper safely parameterizes all filter values.
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the service layer with all SQL aggregation queries. Save your work and take a break.
+> When you return, you'll create the analytics routes and server entry point, then test the API.
 
 ---
 

@@ -383,6 +383,12 @@ export default authSlice.reducer;
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the API service layer and auth slice with login, registration, and token persistence. Save your work and take a break.
+> When you return, you'll build the boards and board slices with async thunks.
+
+---
+
 ## Step 4: Boards Slice
 
 Create `src/features/boards/boardsSlice.ts`:
@@ -694,6 +700,12 @@ export default boardSlice.reducer;
 > **Technical:** The `moveCardOptimistic` reducer uses Immer (built into Redux Toolkit) to mutate state directly — `splice`, `push`, index assignment. Immer tracks these mutations and produces immutable updates under the hood. The async `moveCardAsync` thunk sends the change to the server. If it fails, the component refetches the entire board to restore server truth.
 >
 > **Plain English:** When you drag a card, two things happen: (1) the card moves instantly in the UI via `moveCardOptimistic`, and (2) a background request tells the server. If the server says "no," we reload the board and the card snaps back. The user never waits.
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the boards slice and board slice with optimistic card movement. Save your work and take a break.
+> When you return, you'll build the auth pages, board list, and board view components.
 
 ---
 
@@ -1344,6 +1356,12 @@ export default function CardDetailModal({
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the board view with list columns, card items, and the card detail modal. Save your work and take a break.
+> When you return, you'll build the UI components, App routing, and styles.
+
+---
+
 ## Step 9: UI Components
 
 ### Modal
@@ -1459,6 +1477,12 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   return <>{children}</>;
 }
 ```
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the Modal, Layout, and ProtectedRoute components. Save your work and take a break.
+> When you return, you'll wire everything together with App routing and add the complete stylesheet.
 
 ---
 

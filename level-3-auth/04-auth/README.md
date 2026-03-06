@@ -271,6 +271,12 @@ Express's Request type doesn't include a `user` property by default. We use `as 
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the JWT utilities and auth middleware that protect routes. Save your work and take a break.
+> When you return, you'll build the registration and login routes.
+
+---
+
 ## Step 4: Build the Auth Routes
 
 **Where?** `server/src/routes/auth.ts`
@@ -533,6 +539,12 @@ RETURNING id, email, role, created_at
 ```
 
 We explicitly list which columns to return, omitting `password_hash`. This is safer than `RETURNING *` followed by deleting the field in code.
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the complete auth routes with registration, login, and token verification. Save your work and take a break.
+> When you return, you'll test all the auth endpoints with curl.
 
 ---
 

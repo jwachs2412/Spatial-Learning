@@ -13,6 +13,25 @@ Each level follows the same pattern:
 6. GROWTH REVIEW        → What did we learn? How do we talk about it?
 ```
 
+## How to Pace Yourself
+
+Research on skill acquisition shows that **30–60 minutes of focused, deliberate practice** outperforms marathon sessions. After about an hour of deep coding, your retention drops and mistakes increase. Spreading your learning across shorter sessions — with sleep and rest in between — produces significantly better long-term retention.
+
+Throughout this curriculum, you'll see **Session Break** markers at natural stopping points:
+
+> [!TIP]
+> **Session Break** — You've completed [section]. Save your work and take a break.
+> When you return, you'll [next section].
+
+**When you hit a Session Break:**
+1. **Commit your code** — `git add . && git commit -m "progress: [what you finished]"`
+2. **Step away** — take a real break (15+ minutes minimum, ideally a few hours or overnight)
+3. **Return fresh** — when you come back, re-read the last section you completed to rebuild context
+
+**You do not have to stop at every break** — if you're in flow and energized, keep going. But if you feel your focus slipping, the breaks are there for a reason.
+
+Across all 5 levels, expect roughly **40–55 sessions** total. Some lessons fit in a single session; longer lessons have multiple break points. Each level's README includes a Session Guide showing what to expect.
+
 ---
 
 ## LEVEL 1 — DevPulse (Developer Mood Tracker)

@@ -523,6 +523,12 @@ DISPLAY MODE:                    EDIT MODE:
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the types, API service, ProjectForm, ProjectList, and TaskItem components. Save your work and take a break.
+> When you return, you'll build the remaining components and wire everything together.
+
+---
+
 ## Step 6: Build the TaskList Component
 
 **Where?** `client/src/components/TaskList.tsx`
@@ -747,6 +753,12 @@ export function ProjectDetail({
   );
 }
 ```
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the TaskList, TaskForm, and ProjectDetail components. Save your work and take a break.
+> When you return, you'll build the App component that orchestrates everything, add styles, and commit.
 
 ---
 
@@ -982,6 +994,12 @@ When the user creates a task:
 ```
 
 **Why state lives in App**: Both `ProjectList` and `ProjectDetail` need to know about projects. The task operations need to update `selectedProject`. By keeping all state in App, there's one source of truth. Same "lifting state up" pattern as Level 1 — just more of it.
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the App component with all state management and CRUD operations. Save your work and take a break.
+> When you return, you'll add styles, clean up boilerplate, and commit the complete frontend.
 
 ---
 

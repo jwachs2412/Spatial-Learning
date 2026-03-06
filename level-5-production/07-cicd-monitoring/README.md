@@ -204,6 +204,12 @@ On pull requests, the CI status appears directly on the PR page. Many teams conf
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the complete CI pipeline with parallel frontend and backend test jobs. Save your work and take a break.
+> When you return, you'll set up Sentry error monitoring and add accessibility improvements.
+
+---
+
 ## Part 2: Sentry Error Monitoring
 
 ### What Sentry Does

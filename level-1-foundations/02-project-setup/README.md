@@ -178,6 +178,12 @@ cd ..
 
 ---
 
+> [!TIP]
+> **Session Break** — You've scaffolded the frontend with Vite, React, and TypeScript. Save your work and take a break.
+> When you return, you'll set up the backend with Express and configure the dev tooling.
+
+---
+
 ## Step 5: Create the Backend
 
 > [!IMPORTANT]

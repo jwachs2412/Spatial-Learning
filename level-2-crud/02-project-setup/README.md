@@ -215,6 +215,12 @@ cd ..
 
 ---
 
+> [!TIP]
+> **Session Break** — You've scaffolded both the frontend and backend projects with all dependencies installed. Save your work and take a break.
+> When you return, you'll install PostgreSQL and set up the database connection.
+
+---
+
 ## Step 6: Install PostgreSQL
 
 This is the new part. PostgreSQL is a program that runs on your computer as a service (a background process). It listens on port 5432, waiting for SQL queries.

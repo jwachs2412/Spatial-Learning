@@ -278,6 +278,12 @@ export default defineConfig({
 
 ---
 
+> [!TIP]
+> **Session Break** — You've scaffolded both backend and frontend with all dependencies and modular structure. Save your work and take a break.
+> When you return, you'll create the database, define shared types, and set up CI/CD directories.
+
+---
+
 ## Step 4: Create the Database
 
 > [!IMPORTANT]

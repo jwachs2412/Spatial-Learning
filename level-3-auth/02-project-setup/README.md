@@ -212,6 +212,12 @@ cd ..
 
 ---
 
+> [!TIP]
+> **Session Break** — You've scaffolded the full project structure with both frontend and backend dependencies. Save your work and take a break.
+> When you return, you'll create the PostgreSQL database and configure the connection.
+
+---
+
 ## Step 6: Create the Database
 
 > [!IMPORTANT]

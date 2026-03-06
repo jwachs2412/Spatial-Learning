@@ -235,6 +235,12 @@ This applies the `authenticate` middleware to **every route** in this file. Inst
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the notes CRUD routes with per-user data isolation. Save your work and take a break.
+> When you return, you'll build the admin routes and wire everything into the server.
+
+---
+
 ## Step 2: Build the Admin Routes
 
 **Where?** `server/src/routes/admin.ts`

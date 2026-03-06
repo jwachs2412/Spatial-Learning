@@ -145,6 +145,22 @@ task-forge/
 - More components (6 vs 3) — CRUD requires more UI
 - More routes (10 vs 2) — full CRUD requires more endpoints
 
+## Session Guide
+
+Level 2 takes approximately **9–12 sessions** (30–60 minutes each).
+
+| Lesson | Sessions | Notes |
+|--------|----------|-------|
+| 01 — Orientation | 1 | Read and absorb in one sitting |
+| 02 — Project Setup | 2 | Break after backend setup, before PostgreSQL install |
+| 03 — Database | 2 | Break after schema created |
+| 04 — Backend | 3 | Breaks after project routes and after task routes |
+| 05 — Frontend | 4 | Breaks after TaskItem, after ProjectDetail, and after App component |
+| 06 — Deployment | 1 | Complete in one sitting |
+| 07 — Growth Review | 1 | Complete in one sitting |
+
+Look for **Session Break** markers inside each lesson — they tell you exactly when to pause.
+
 ## Learning Path
 
 Work through these sections in order:

@@ -284,6 +284,12 @@ The FilterBar only dispatches actions — it doesn't make API calls. The App com
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the layout, sidebar, and filter bar components. Save your work and take a break.
+> When you return, you'll build the overview cards, charts, and events table.
+
+---
+
 ## Step 4: Overview Cards
 
 Create `src/features/analytics/OverviewCards.tsx`:
@@ -568,6 +574,12 @@ export default function DeviceChart() {
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the overview cards and all three chart components with Recharts. Save your work and take a break.
+> When you return, you'll build the events table with pagination and the App component.
+
+---
+
 ## Step 6: Events Table
 
 Create `src/features/events/EventsTable.tsx`:
@@ -677,6 +689,12 @@ export default function EventsTable() {
 ```
 
 The EventsTable uses `useEffect` to fetch data whenever `page` or `filters` change. The dependency array `[dispatch, filters, page]` ensures refetching when navigation or filtering occurs.
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the events table with pagination and filter integration. Save your work and take a break.
+> When you return, you'll wire everything together in the App component and add styles.
 
 ---
 

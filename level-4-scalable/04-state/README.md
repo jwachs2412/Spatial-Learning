@@ -240,6 +240,12 @@ createSlice({
 
 ---
 
+> [!TIP]
+> **Session Break** — You've configured the Redux store and built the filters slice with actions and selectors. Save your work and take a break.
+> When you return, you'll build the analytics and events slices with async thunks.
+
+---
+
 ## Step 3: Analytics Slice
 
 This slice handles async API calls with `createAsyncThunk`.
@@ -431,6 +437,12 @@ THUNK LIFECYCLE:
 > **Technical:** `createAsyncThunk` wraps your async function with automatic dispatching of pending/fulfilled/rejected actions. The `extraReducers` builder pattern handles these generated actions. This replaces the manual "dispatch loading, try/catch, dispatch success/error" pattern you'd write by hand.
 >
 > **Plain English:** Instead of manually saying "tell everyone I'm loading," then making the call, then "tell everyone I'm done" — the thunk does all three steps automatically. You just write the API call.
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the analytics slice with async thunks for all five API endpoints. Save your work and take a break.
+> When you return, you'll build the events slice, API service layer, and wire up the store.
 
 ---
 

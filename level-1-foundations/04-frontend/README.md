@@ -441,6 +441,12 @@ export function EntryList({ entries }: EntryListProps) {
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the EntryForm and EntryList components. Save your work and take a break.
+> When you return, you'll build the MoodChart and wire everything together in the App component.
+
+---
+
 ## Step 5: Build the MoodChart Component
 
 **Where?** `client/src/components/MoodChart.tsx`
@@ -503,6 +509,12 @@ export function MoodChart({ entries }: MoodChartProps) {
   );
 }
 ```
+
+---
+
+> [!TIP]
+> **Session Break** — You've built all three display components: EntryForm, EntryList, and MoodChart. Save your work and take a break.
+> When you return, you'll build the App component that wires everything together, add styles, and commit.
 
 ---
 

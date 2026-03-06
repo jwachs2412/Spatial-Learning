@@ -329,6 +329,12 @@ export default defineConfig({
 
 ---
 
+> [!TIP]
+> **Session Break** — You've set up both backend and frontend with all dependencies and test configuration. Save your work and take a break.
+> When you return, you'll create the database, define shared types, and write utility functions.
+
+---
+
 ## Step 4: Create the Database
 
 > [!IMPORTANT]

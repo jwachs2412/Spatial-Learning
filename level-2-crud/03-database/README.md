@@ -223,6 +223,12 @@ You should see both tables with all their columns and constraints.
 
 ---
 
+> [!TIP]
+> **Session Break** — You've designed the schema with foreign keys and created both tables in PostgreSQL. Save your work and take a break.
+> When you return, you'll practice SQL queries hands-on and build the database connection pool.
+
+---
+
 ## Step 4: SQL Hands-On Tutorial
 
 Before writing any TypeScript, practice SQL directly in `psql`. This is important — you should understand what your code will ask the database to do.

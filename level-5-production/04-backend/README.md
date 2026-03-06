@@ -290,6 +290,12 @@ export default router;
 
 ---
 
+> [!TIP]
+> **Session Break** — You've built the middleware stack and complete auth module with registration, login, and JWT verification. Save your work and take a break.
+> When you return, you'll build the boards module with CRUD operations and membership management.
+
+---
+
 ## Step 3: Boards Module
 
 ### Boards Service
@@ -622,6 +628,12 @@ router.get('/:id/members', async (req: Request, res: Response, next: NextFunctio
 
 export default router;
 ```
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the boards module with CRUD operations, membership authorization, and nested JSON queries. Save your work and take a break.
+> When you return, you'll build the lists, cards, and comments modules.
 
 ---
 
@@ -1019,6 +1031,12 @@ router.delete('/cards/:id', async (req: Request, res: Response, next: NextFuncti
 
 export default router;
 ```
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the cards module with CRUD, the move card transaction, and authorization chains. Save your work and take a break.
+> When you return, you'll build the comments module and wire everything into the server entry point.
 
 ---
 

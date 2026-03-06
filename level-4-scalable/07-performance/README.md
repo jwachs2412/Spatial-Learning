@@ -132,6 +132,12 @@ The dependency array `[timeSeries]` tells React: "only recompute if `timeSeries`
 
 ---
 
+> [!TIP]
+> **Session Break** — You've applied React.memo to chart components and useMemo for expensive calculations. Save your work and take a break.
+> When you return, you'll add error boundaries, debouncing, and review production logging.
+
+---
+
 ## useCallback — Stable Function References
 
 `useCallback` returns a memoized version of a callback function. This prevents child components from re-rendering when the parent passes the same function.

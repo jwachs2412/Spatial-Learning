@@ -163,6 +163,12 @@ The `data` object in `useSortable` lets us pass metadata through drag events —
 
 ---
 
+> [!TIP]
+> **Session Break** — You've learned dnd-kit concepts and built the SortableCard component. Save your work and take a break.
+> When you return, you'll update ListColumn and BoardView to complete the drag-and-drop flow.
+
+---
+
 ### Step 2: Update ListColumn.tsx
 
 Wrap the cards inside each list with `SortableContext` so dnd-kit knows they are sortable.
@@ -643,6 +649,12 @@ This is the same pattern used by Trello, Notion, Linear, and every modern drag-a
 
 > [!WARNING]
 > **`JSON.parse(JSON.stringify(board))` creates a deep clone** of the board state for the snapshot. This works correctly for serializable data (strings, numbers, arrays, objects) but would break if the state contained functions, Dates, or class instances. Redux state should always be serializable, so this is safe here. For large boards with hundreds of cards, consider a more targeted snapshot (just the affected lists).
+
+---
+
+> [!TIP]
+> **Session Break** — You've built the optimistic update pattern with snapshot, dispatch, and rollback. Save your work and take a break.
+> When you return, you'll add the API service update, accessibility features, and drag-and-drop styles.
 
 ---
 

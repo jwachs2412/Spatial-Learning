@@ -128,6 +128,22 @@ dev-pulse/
 - `src/` contains source code. `package.json` and config files live at the root of each project.
 - `components/` holds UI pieces. `services/` holds code that talks to the outside world. `types/` holds TypeScript definitions. Each folder has one clear job.
 
+## Session Guide
+
+Level 1 takes approximately **8–10 sessions** (30–60 minutes each).
+
+| Lesson | Sessions | Notes |
+|--------|----------|-------|
+| 01 — Orientation | 1 | Read and absorb in one sitting |
+| 02 — Project Setup | 2 | Break after frontend scaffold |
+| 03 — Backend | 2 | Break after routes defined |
+| 04 — Frontend | 3 | Breaks after EntryList and after MoodChart |
+| 05 — Connecting | 2 | Break after API service created |
+| 06 — Deployment | 1 | Complete in one sitting |
+| 07 — Growth Review | 1 | Complete in one sitting |
+
+Look for **Session Break** markers inside each lesson — they tell you exactly when to pause.
+
 ## Learning Path
 
 Work through these sections in order:

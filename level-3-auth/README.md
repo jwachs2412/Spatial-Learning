@@ -181,6 +181,23 @@ vault-note/
 - `client/src/context/` — React Context for managing auth state globally
 - `client/src/components/ProtectedRoute.tsx` — guards routes that require login
 
+## Session Guide
+
+Level 3 takes approximately **9–12 sessions** (30–60 minutes each).
+
+| Lesson | Sessions | Notes |
+|--------|----------|-------|
+| 01 — Orientation | 1 | Read and absorb in one sitting |
+| 02 — Project Setup | 2 | Break after backend scaffold complete |
+| 03 — Database | 1 | Complete in one sitting |
+| 04 — Authentication | 3 | Breaks after auth middleware and after auth routes |
+| 05 — Backend | 2 | Break after note routes, before admin routes |
+| 06 — Frontend | 4 | Breaks after Auth Context, after Register page, and after Notes page |
+| 07 — Deployment | 1 | Complete in one sitting |
+| 08 — Growth Review | 1 | Complete in one sitting |
+
+Look for **Session Break** markers inside each lesson — they tell you exactly when to pause.
+
 ## Learning Path
 
 Work through these sections in order:
