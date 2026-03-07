@@ -885,8 +885,6 @@ git commit -m "feat: add full CRUD API with project and task routes"
 
 ---
 
-## Spatial Check-In
-
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                    WHAT EXISTS NOW                                 │
@@ -911,8 +909,10 @@ git commit -m "feat: add full CRUD API with project and task routes"
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+---
+
 > [!TIP]
-> **Spatial Check-In** — Questions to answer before moving on.
+> ## Spatial Check-In
 
 1. **What happens when you use string concatenation instead of parameterized queries?**
 

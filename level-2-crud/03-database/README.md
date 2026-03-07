@@ -544,8 +544,6 @@ git commit -m "feat: add database schema and connection pool"
 
 ---
 
-## Spatial Check-In
-
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                    WHAT EXISTS NOW                                 │
@@ -564,8 +562,10 @@ git commit -m "feat: add database schema and connection pool"
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+---
+
 > [!TIP]
-> **Spatial Check-In** — Questions to answer before moving on.
+> ## Spatial Check-In
 
 1. **What is a foreign key?**
 

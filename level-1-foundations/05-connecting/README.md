@@ -339,8 +339,6 @@ git push -u origin main
 
 ---
 
-## Spatial Check-In
-
 You now have a **complete, working full-stack application** running on your local machine.
 
 ```
@@ -363,6 +361,27 @@ You now have a **complete, working full-stack application** running on your loca
 ```
 
 **Remaining limitation**: Data lives in memory. When you restart the backend, all entries are lost. This is intentional for Level 1 — Level 2 introduces a real database.
+
+---
+
+> [!TIP]
+> ## Spatial Check-In
+
+1. **What does the proxy setting in vite.config.ts do?**
+
+<details><summary>Answer</summary>
+
+It forwards API requests from the frontend dev server (port 5173) to the backend (port 3001), avoiding CORS issues during development.
+
+</details>
+
+2. **What happens if the backend is not running when you load the frontend?**
+
+<details><summary>Answer</summary>
+
+The fetch calls fail. The user sees either an error message (if you handle the error) or a blank page (if you don't). The frontend loads fine because Vite serves it, but the data never arrives.
+
+</details>
 
 ---
 

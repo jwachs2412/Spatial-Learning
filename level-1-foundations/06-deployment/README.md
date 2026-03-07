@@ -328,8 +328,6 @@ git push
 
 ---
 
-## Spatial Check-In — The Complete Picture
-
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                    DEPLOYED ARCHITECTURE                              │
@@ -360,6 +358,27 @@ git push
 │   Both auto-deploy when you push to GitHub.                          │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+> [!TIP]
+> ## Spatial Check-In
+
+1. **Why is the frontend deployed to Vercel and the backend to Render instead of putting both on one service?**
+
+<details><summary>Answer</summary>
+
+The frontend is static files (HTML, CSS, JS) that need a CDN for fast delivery. The backend is a running Node.js process that needs a server. Different hosting needs require different services.
+
+</details>
+
+2. **What does CORS_ORIGIN do in the backend's production environment?**
+
+<details><summary>Answer</summary>
+
+It tells the backend which frontend URL is allowed to make requests. Without it, the browser blocks cross-origin requests from your Vercel frontend to your Render backend.
+
+</details>
 
 ---
 

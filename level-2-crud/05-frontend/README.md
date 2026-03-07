@@ -1396,10 +1396,8 @@ git commit -m "feat: add React frontend with project and task management UI"
 
 ---
 
-## Spatial Check-In
-
 > [!TIP]
-> **Spatial Check-In** — Questions to answer before moving on.
+> ## Spatial Check-In
 
 1. **How does the app switch between the project list view and the project detail view?**
 

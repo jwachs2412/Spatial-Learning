@@ -963,8 +963,6 @@ git commit -m "feat: add React frontend with mood entry form and list"
 
 ---
 
-## Spatial Check-In
-
 The frontend exists but **cannot talk to the backend yet** (we need to run both simultaneously). Let's verify you understand the state flow:
 
 ```
@@ -992,6 +990,27 @@ React re-renders App and all children
 ```
 
 **Data flows DOWN through props. Events flow UP through callbacks. State changes trigger re-renders.**
+
+---
+
+> [!TIP]
+> ## Spatial Check-In
+
+1. **What is the difference between props and state?**
+
+<details><summary>Answer</summary>
+
+Props are data passed from parent to child (read-only). State is data managed inside a component (can change).
+
+</details>
+
+2. **Why do we split the frontend into multiple components instead of one big file?**
+
+<details><summary>Answer</summary>
+
+Separation of concerns. Each component handles one job, making the code easier to read, debug, and modify.
+
+</details>
 
 ---
 

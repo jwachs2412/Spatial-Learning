@@ -512,8 +512,6 @@ git commit -m "feat: add protected notes CRUD and admin stats routes"
 
 ---
 
-## Spatial Check-In
-
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                    WHAT EXISTS NOW                                 │
@@ -537,8 +535,10 @@ git commit -m "feat: add protected notes CRUD and admin stats routes"
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+---
+
 > [!TIP]
-> **Spatial Check-In**
+> ## Spatial Check-In
 
 1. **Why does every notes query include `AND user_id = $2`?**
 

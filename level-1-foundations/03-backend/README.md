@@ -440,8 +440,6 @@ git commit -m "feat: add Express server with mood entries API"
 
 ---
 
-## Spatial Check-In
-
 You now have a working backend. Let's make sure you understand its place in the system:
 
 ```
@@ -464,8 +462,10 @@ You now have a working backend. Let's make sure you understand its place in the 
 └─────────────────────────────────────────────────────┘
 ```
 
+---
+
 > [!TIP]
-> **Spatial Check-In** — Questions to answer before moving on.
+> ## Spatial Check-In
 
 1. **What happens if you restart the server?**
 
