@@ -1,172 +1,85 @@
-# Level 3 — VaultNote: Secure Personal Notes
+# Level 3 — VaultNote (Secure Personal Notes)
 
 ## What You Will Build
 
-VaultNote is a personal notes application where users register an account, log in, and manage their own private notes. Each user can only see, edit, and delete their own notes — no one else's. An admin user can view usage statistics across all users.
+VaultNote is a personal notes application where users register, log in, and manage private notes. Each user can only see their own notes. An admin role can view usage statistics. Authentication uses JWT tokens and bcrypt password hashing.
 
-It has a React + TypeScript frontend with client-side routing, a Node.js + Express backend with JWT authentication, and a PostgreSQL database. All three are deployed to the internet with proper secret management.
+### Why This App
 
-## Why This App
+Authentication is the dividing line between "toy project" and "real application." This level teaches you how identity works on the web — how a server knows who is making a request, how tokens travel between client and server, where trust boundaries exist, and what "security" actually means in practice.
 
-Authentication is the dividing line between "learning project" and "real application." Every production app has users. Every production app has protected data. This level teaches you how identity works on the web:
+### What Changed From Level 2
 
-1. How a server knows **who** is making a request
-2. How passwords are stored safely (they're never stored in plain text)
-3. How tokens travel between frontend and backend
-4. Where **trust boundaries** exist and why they matter
-5. How to protect routes so users can only access their own data
-6. How to deploy an app with secrets that must never leak
+| Level 2 (TaskForge) | Level 3 (VaultNote) |
+|-----|------|
+| Anyone can access any data | **Users only see their own data** |
+| No user accounts | **Registration + Login** |
+| Passwords not needed | **bcrypt password hashing** |
+| No identity verification | **JWT token authentication** |
+| All routes public | **Protected routes (frontend + backend)** |
+| Single role | **User + Admin roles** |
 
-## What You Will Learn
+---
 
-By the end of Level 3, you will understand:
-
-- How user registration and login work end-to-end
-- How bcrypt hashes passwords (and why you never store plain text)
-- How JWT tokens are created, signed, and verified
-- How auth middleware protects routes
-- How React Router provides client-side navigation
-- How protected routes work on both frontend and backend
-- How role-based access control scopes what users can do
-- Where trust boundaries exist in a web application
-- How to manage secrets (JWT_SECRET) in production
-
-## Level 3 Architecture (The Big Picture)
+## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          YOUR APPLICATION                               │
-│                                                                        │
-│  ┌──────────────────┐   ┌──────────────────────┐   ┌──────────────┐  │
-│  │    FRONTEND       │   │      BACKEND          │   │   DATABASE    │  │
-│  │  (React + TS)     │   │  (Node + Express)     │   │ (PostgreSQL)  │  │
-│  │                  │   │                      │   │              │  │
-│  │ ┌──────────────┐ │   │ ┌──────────────────┐ │   │ ┌──────────┐ │  │
-│  │ │ React Router │ │   │ │  Auth Middleware  │ │   │ │  users   │ │  │
-│  │ │              │ │   │ │  (verifies JWT)   │ │   │ │  table   │ │  │
-│  │ │ /login       │ │   │ ├──────────────────┤ │   │ ├──────────┤ │  │
-│  │ │ /register    │ │   │ │  Auth Routes     │ │   │ │  notes   │ │  │
-│  │ │ /notes       │ │   │ │  (register/login)│ │   │ │  table   │ │  │
-│  │ │ /notes/:id   │ │   │ ├──────────────────┤ │   │ └──────────┘ │  │
-│  │ └──────────────┘ │   │ │  Notes Routes    │ │   │              │  │
-│  │                  │   │ │  (protected CRUD) │ │   │ Passwords   │  │
-│  │ Token stored in  │   │ ├──────────────────┤ │   │ stored as   │  │
-│  │ localStorage     │   │ │  Error Handler   │ │   │ bcrypt      │  │
-│  │                  │   │ └──────────────────┘ │   │ hashes      │  │
-│  │ Sent via         │   │                      │   │              │  │
-│  │ Authorization    │   │ JWT_SECRET kept in   │   │              │  │
-│  │ header           │   │ environment only     │   │              │  │
-│  └──────────────────┘   └──────────────────────┘   └──────────────┘  │
-│                                                                        │
-│               ┌────────────────────────────────────┐                  │
-│               │         TRUST BOUNDARY              │                  │
-│               │                                    │                  │
-│               │  ABOVE: Server + Database (trusted) │                  │
-│               │  BELOW: Browser (untrusted)         │                  │
-│               └────────────────────────────────────┘                  │
-└────────────────────────────────────────────────────────────────────────┘
+┌──────────────┐      ┌──────────────────┐      ┌──────────────┐
+│   FRONTEND   │      │     BACKEND      │      │   DATABASE   │
+│              │      │                  │      │              │
+│  Login Form  │─────▶│  Auth Middleware │─────▶│  Users table │
+│  Token Store │◀─────│  Route Guards    │◀─────│  Notes table │
+│  Protected   │      │  JWT Creation    │      │  Hashed PWs  │
+│  Routes      │      │  JWT Validation  │      │              │
+└──────────────┘      └──────────────────┘      └──────────────┘
+        │                      │
+   ┌────▼──────────────────────▼──────────────────────────┐
+   │                  TRUST BOUNDARY                      │
+   │  Above: Server-side (WE control)                     │
+   │  Below: Client-side (USER controls)                  │
+   │  Never trust data from below the boundary.           │
+   └──────────────────────────────────────────────────────┘
 ```
 
-## Authentication Flow (How Identity Works)
+---
 
-```
-REGISTRATION:
-─────────────
-1. User fills out register form (email + password)
-   │
-2. Frontend sends POST /api/auth/register
-   │  Body: { email: "user@example.com", password: "mypassword" }
-   │
-3. Backend receives the request
-   │  → Validates email and password
-   │  → Hashes password with bcrypt (never stores plain text)
-   │  → Inserts user into database: { email, password_hash }
-   │  → Creates JWT token containing { userId, role }
-   │  → Sends back: { token: "eyJhbG...", user: { id, email, role } }
-   │
-4. Frontend stores the token in localStorage
-   │  → Redirects to /notes
-
-LOGIN:
-──────
-1. User fills out login form (email + password)
-   │
-2. Frontend sends POST /api/auth/login
-   │  Body: { email: "user@example.com", password: "mypassword" }
-   │
-3. Backend receives the request
-   │  → Finds user by email in database
-   │  → Compares password with stored hash using bcrypt.compare()
-   │  → If match: creates JWT token, sends it back
-   │  → If no match: sends 401 Unauthorized
-   │
-4. Frontend stores the token in localStorage
-   │  → Redirects to /notes
-
-AUTHENTICATED REQUESTS:
-───────────────────────
-1. Frontend sends request with token:
-   │  GET /api/notes
-   │  Authorization: Bearer eyJhbG...
-   │
-2. Auth middleware intercepts the request
-   │  → Extracts token from Authorization header
-   │  → Verifies token signature using JWT_SECRET
-   │  → Decodes payload: { userId: 1, role: "user" }
-   │  → Attaches user info to request: req.user = { id: 1, role: "user" }
-   │  → Passes request to route handler
-   │
-3. Route handler runs
-   │  → Uses req.user.id to scope the query:
-   │     SELECT * FROM notes WHERE user_id = req.user.id
-   │  → Returns only THIS user's notes
-```
-
-## Folder Structure (What Goes Where and Why)
+## Folder Structure
 
 ```
 vault-note/
-├── client/                      ← FRONTEND
+├── client/
 │   ├── src/
-│   │   ├── components/          ← React components
-│   │   │   ├── LoginForm.tsx
-│   │   │   ├── RegisterForm.tsx
-│   │   │   ├── NoteForm.tsx
-│   │   │   ├── NoteList.tsx
-│   │   │   ├── NoteEditor.tsx
+│   │   ├── components/
 │   │   │   └── ProtectedRoute.tsx
-│   │   ├── pages/               ← Route-level page components (NEW)
+│   │   ├── context/
+│   │   │   └── AuthContext.tsx
+│   │   ├── pages/
 │   │   │   ├── LoginPage.tsx
 │   │   │   ├── RegisterPage.tsx
 │   │   │   └── NotesPage.tsx
-│   │   ├── context/             ← React Context for auth state (NEW)
-│   │   │   └── AuthContext.tsx
-│   │   ├── types/
-│   │   │   └── index.ts
 │   │   ├── services/
 │   │   │   └── api.ts
+│   │   ├── types/
+│   │   │   └── index.ts
 │   │   ├── App.tsx
-│   │   ├── App.css
-│   │   └── main.tsx
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.ts
+│   │   └── App.css
+│   └── package.json
 │
-├── server/                      ← BACKEND
+├── server/
 │   ├── src/
 │   │   ├── db/
-│   │   │   ├── index.ts
-│   │   │   └── schema.sql
-│   │   ├── routes/
-│   │   │   ├── auth.ts          ← Registration + login (NEW)
-│   │   │   └── notes.ts         ← Protected CRUD for notes
+│   │   │   ├── schema.sql
+│   │   │   └── index.ts
 │   │   ├── middleware/
-│   │   │   ├── authenticate.ts  ← JWT verification middleware (NEW)
+│   │   │   ├── authenticate.ts    ← JWT verification
 │   │   │   └── errorHandler.ts
+│   │   ├── routes/
+│   │   │   ├── auth.ts            ← Register + Login
+│   │   │   ├── notes.ts           ← Protected CRUD
+│   │   │   └── admin.ts           ← Admin-only routes
 │   │   ├── types/
 │   │   │   └── index.ts
 │   │   └── index.ts
-│   ├── .env
 │   ├── package.json
 │   └── tsconfig.json
 │
@@ -174,45 +87,25 @@ vault-note/
 └── README.md
 ```
 
-**What changed from Level 2?**
-- `server/src/routes/auth.ts` — new route file for registration and login
-- `server/src/middleware/authenticate.ts` — new middleware that verifies JWT tokens
-- `client/src/pages/` — page-level components for React Router
-- `client/src/context/` — React Context for managing auth state globally
-- `client/src/components/ProtectedRoute.tsx` — guards routes that require login
+---
 
 ## Session Guide
 
-Level 3 takes approximately **9–12 sessions** (30–60 minutes each).
+| Session | Lesson | What You Do |
+|---------|--------|-------------|
+| 1 | [01 — Orientation](./01-orientation/) | Understand auth, security, trust boundaries |
+| 2 | [02 — Project Setup](./02-project-setup/) | Scaffold with auth dependencies |
+| 3 | [03 — Database](./03-database/) | Design users + notes schema |
+| 4-5 | [04 — Authentication](./04-auth/) | Build registration, login, JWT, middleware |
+| 5-6 | [05 — Backend](./05-backend/) | Protected CRUD routes for notes |
+| 7-8 | [06 — Frontend](./06-frontend/) | Auth pages, routing, notes UI |
+| 8-9 | [07 — Deployment](./07-deployment/) | Deploy with secret management |
+| 9 | [08 — Growth](./08-growth/) | Review security skills |
 
-| Lesson | Sessions | Notes |
-|--------|----------|-------|
-| 01 — Orientation | 1 | Read and absorb in one sitting |
-| 02 — Project Setup | 2 | Break after backend scaffold complete |
-| 03 — Database | 1 | Complete in one sitting |
-| 04 — Authentication | 3 | Breaks after auth middleware and after auth routes |
-| 05 — Backend | 2 | Break after note routes, before admin routes |
-| 06 — Frontend | 4 | Breaks after Auth Context, after Register page, and after Notes page |
-| 07 — Deployment | 1 | Complete in one sitting |
-| 08 — Growth Review | 1 | Complete in one sitting |
-
-Look for **Session Break** markers inside each lesson — they tell you exactly when to pause.
-
-## Learning Path
-
-Work through these sections in order:
-
-1. **[01 — Orientation](./01-orientation/)** — Prerequisites gate, security mental models, trust boundaries
-2. **[02 — Project Setup](./02-project-setup/)** — Scaffold the project with new auth dependencies
-3. **[03 — Database Design](./03-database/)** — Users table, notes table, password hashing concepts
-4. **[04 — Authentication](./04-auth/)** — Registration, login, bcrypt, JWT, auth middleware
-5. **[05 — Building the Backend](./05-backend/)** — Protected CRUD routes for notes
-6. **[06 — Building the Frontend](./06-frontend/)** — React Router, auth pages, notes UI
-7. **[07 — Deployment](./07-deployment/)** — Deploy with JWT_SECRET and security considerations
-8. **[08 — Growth Review](./08-growth/)** — What you learned and how to talk about it
+**Estimated total: 9–12 sessions (30–60 min each)**
 
 ---
 
 | | |
 |:---|---:|
-| [← Level 2 — TaskForge](../level-2-crud/) | [01 — Start Here →](./01-orientation/) |
+| [← Level 2: TaskForge](../level-2-crud/) | [Step 1 — Orientation →](./01-orientation/) |

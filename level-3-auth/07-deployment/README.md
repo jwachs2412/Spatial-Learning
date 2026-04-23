@@ -1,224 +1,110 @@
-`Level 3` **Step 7 of 8** — Deployment
-
-# 07 — Deployment: Shipping with Secrets
+# Step 7 — Deployment: Shipping with Secrets
 
 ## Spatial Orientation
 
-Same three-tier deployment as Level 2, with one critical addition: **secrets management**. The `JWT_SECRET` must exist in production without ever touching version control.
-
 ```
-PRODUCTION ENVIRONMENT:
-
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ┌──────────────────┐   ┌────────────────────────┐   ┌───────────┐ │
-│  │  Vercel CDN       │   │   Render Web Service    │   │  Render   │ │
-│  │  (Frontend)       │   │   (Backend)              │   │  Postgres │ │
-│  │                  │   │                          │   │           │ │
-│  │  VITE_API_URL    │   │  DATABASE_URL            │   │  users    │ │
-│  │                  │   │  CORS_ORIGIN             │   │  notes    │ │
-│  │  No secrets here │   │  JWT_SECRET ← NEW        │   │           │ │
-│  │  (public code)   │   │  JWT_EXPIRES_IN          │   │  Hashed   │ │
-│  └──────────────────┘   │  NODE_ENV                │   │  passwords│ │
-│                          └────────────────────────┘   └───────────┘ │
-│                                                                      │
-│  Secrets live ONLY in Render's environment variables.                │
-│  Never in code. Never in Git. Never in the frontend.                │
-└──────────────────────────────────────────────────────────────────────┘
+PRODUCTION
+┌──────────────┐   ┌────────────────┐   ┌──────────────┐
+│   Vercel     │   │ Render/Railway │   │  Supabase/   │
+│   (Frontend) │──▶│   (Backend)    │──▶│  Neon/Render  │
+│              │   │                │   │  (Database)  │
+│              │   │  JWT_SECRET    │   │              │
+│              │   │  (env var)     │   │  users table │
+│              │   │                │   │  notes table │
+└──────────────┘   └────────────────┘   └──────────────┘
 ```
+
+Level 3 deployment adds a critical dimension: **secret management**. Your `JWT_SECRET` must be unique per environment and NEVER committed to code.
 
 ---
 
-## Step 1: Verify Everything Works Locally
+## 1. Verify Locally
 
-Run both servers and test the full authentication flow:
-
-**Terminal 1 — Backend:**
-
-```bash
-cd server && npm run dev
-```
-
-**Terminal 2 — Frontend:**
-
-```bash
-cd client && npm run dev
-```
-
-Open `http://localhost:5173` and test:
-
-1. Visit `/register` → create an account → redirected to `/notes`
-2. Create a note → it appears in the sidebar
-3. Click a note → edit it → save
-4. Delete a note → it disappears
-5. Click "Log Out" → redirected to `/login`
-6. Log in with your credentials → see your notes again
-7. **Refresh the page** → still logged in (token persists in localStorage)
-8. **Restart the backend** → refresh → notes still there (database persistence)
-
-### Cross-User Isolation Test
-
-1. Register a second account (different email)
-2. Create notes with the second account
-3. Log out, log in as the first account
-4. **First account should NOT see second account's notes**
-
-Stop both servers.
+Test the full flow locally:
+1. Register two users
+2. Create notes for each user
+3. Verify cross-user isolation (user A can't see user B's notes)
+4. Log out and log back in — token should persist
+5. Verify `npm run build` succeeds in the server directory
 
 ---
 
-## Step 2: Push to GitHub
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
-
-```bash
-git status
-```
-
-Commit any uncommitted changes:
+## 2. Push to GitHub
 
 ```bash
 git add .
 git commit -m "chore: prepare for deployment"
-```
-
-Create the GitHub repo and push:
-
-```bash
-# Option A: GitHub CLI
 gh repo create vault-note --public --source=. --remote=origin --push
-
-# Option B: Manual
-# 1. Create "vault-note" repo on github.com (no README)
-# 2. Then:
-git remote add origin git@github.com:yourusername/vault-note.git
-git push -u origin main
 ```
 
 ---
 
-## Step 3: Deploy the Database (Render PostgreSQL)
+## 3. Deploy the Database
 
-1. Go to [render.com](https://render.com) → **"New"** → **"PostgreSQL"**
-2. Configure:
-   - **Name**: `vaultnote-db`
-   - **Database**: `vaultnote`
-   - **Region**: Same as your Level 2 deployment
-   - **Plan**: Free
+### Option A: Supabase (Recommended)
 
-3. Click **"Create Database"**
-4. Copy both the **Internal** and **External** Database URLs
+> ⚠️ **If you used Supabase for Level 2**, you have 1 free project remaining. If you used Render for Level 2, you can use Supabase here.
 
-### Run Schema on Production
+1. Go to [supabase.com](https://supabase.com) → New Project
+2. Name: `vaultnote`, set a database password, choose a region
+3. Go to **Project Settings** → **Database** → **Connection string** → **URI**
+4. Run schema: `psql "YOUR_CONNECTION_STRING" < server/src/db/schema.sql`
 
-```bash
-psql "YOUR_EXTERNAL_DATABASE_URL" < server/src/db/schema.sql
-```
+### Option B: Neon
 
-Expected: `DROP TABLE` / `CREATE TABLE` output.
+1. Go to [neon.tech](https://neon.tech) → Create Project: `vaultnote`
+2. Copy the connection string
+3. Run schema: `psql "YOUR_CONNECTION_STRING" < server/src/db/schema.sql`
 
-> [!WARNING]
-> **Only run this once in production** (or when you intentionally want to reset all data). The schema drops existing tables first.
+### Option C: Render PostgreSQL
+
+> ⚠️ **Only 1 free database per account, 90-day expiration.** If you already used it for Level 2, choose Supabase or Neon.
 
 ---
 
-## Step 4: Deploy the Backend (Render Web Service)
+## 4. Deploy the Backend
 
-1. Render → **"New"** → **"Web Service"**
-2. Connect your `vault-note` repository
-3. Configure:
-   - **Name**: `vault-note-api`
-   - **Root Directory**: `server`
-   - **Runtime**: Node
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
+On Render (or Railway):
 
-4. **Add environment variables:**
+| Setting | Value |
+|---------|-------|
+| **Root Directory** | `server` |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm start` |
 
-| Key | Value |
-|-----|-------|
-| `DATABASE_URL` | (Internal Database URL from Render) |
-| `CORS_ORIGIN` | `https://vault-note-xxxxx.vercel.app` (from Vercel, after step 5) |
-| `JWT_SECRET` | (generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
+Environment variables:
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | Your database connection string |
+| `CORS_ORIGIN` | `https://vault-note.vercel.app` (fill after frontend deploy) |
+| `JWT_SECRET` | Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `JWT_EXPIRES_IN` | `7d` |
 | `NODE_ENV` | `production` |
 
-> [!WARNING]
-> **Generate a unique JWT_SECRET for production.** Do NOT use the same value as your development `.env`. Run the crypto command to generate a random 64-character hex string. This secret is the foundation of your authentication system — if it leaks, anyone can forge tokens.
+> ⚠️ **JWT_SECRET must be unique per environment.** Never reuse your development secret in production. Generate a new random string for production.
 
-5. Click **"Create Web Service"**
-
-### Verify the Backend
-
-```
-https://vault-note-api.onrender.com/api/health
-```
-
-Expected: `{"status":"ok","database":"connected",...}`
+Verify: `https://your-api.onrender.com/api/health` should show `database: "connected"`.
 
 ---
 
-## Step 5: Deploy the Frontend (Vercel)
+## 5. Deploy the Frontend
 
-1. Go to [vercel.com](https://vercel.com) → **"Add New"** → **"Project"**
-2. Import `vault-note` repository
-3. Configure:
-   - **Framework Preset**: Vite
-   - **Root Directory**: `client`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
+On Vercel:
 
-4. **Add environment variable:**
+| Setting | Value |
+|---------|-------|
+| **Framework** | Vite |
+| **Root Directory** | `client` |
+| **Build Command** | `npm run build` |
+| **Output Directory** | `dist` |
 
-| Key | Value |
-|-----|-------|
-| `VITE_API_URL` | `https://vault-note-api.onrender.com/api` |
+Environment variable:
+- `VITE_API_URL` = `https://vault-note-api.onrender.com/api`
 
-5. Click **"Deploy"**
+### React Router Fix
 
-### Update Render CORS
-
-Go back to Render → your web service → Environment:
-- Set `CORS_ORIGIN` to your Vercel URL: `https://vault-note-xxxxx.vercel.app`
-- Save → Render redeploys automatically
-
----
-
-## Step 6: Verify Production
-
-Visit your Vercel URL:
-
-1. Register a new account
-2. Create notes
-3. Log out → log back in → notes are there
-4. Refresh → still logged in
-5. Register a second account → confirm isolation (can't see first account's notes)
-6. Try from a different device → same experience
-
-### Security Verification
-
-Open browser DevTools → Application tab → Local Storage. You should see the JWT token stored there. This is expected — it's how the frontend persists the login state.
-
-Open DevTools → Network tab → look at a request to `/api/notes`. In the request headers, you should see `Authorization: Bearer eyJ...`. This is how the token travels to the backend.
-
----
-
-## Production Troubleshooting
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| "No token provided" on protected routes | Frontend not sending Authorization header | Check `authHeaders()` in api.ts, verify VITE_API_URL |
-| "Invalid or expired token" | JWT_SECRET mismatch or token expired | Verify JWT_SECRET is set on Render, try logging in again |
-| CORS error | Origin mismatch | Verify CORS_ORIGIN on Render matches Vercel URL exactly |
-| "Email already registered" | User exists in prod DB | Use a different email, or reset the production DB |
-| Login works but notes don't load | VITE_API_URL wrong | Check Vercel env var includes `/api` |
-| 502 on backend | Server crashed | Check Render logs — likely a missing env var |
-| Blank page after login | React Router issue | Check Vercel redirect rules — add a `vercel.json` rewrite (see below) |
-
-### React Router + Vercel Fix
-
-If refreshing `/notes` gives a 404, create `client/vercel.json`:
+Create `client/vercel.json`:
 
 ```json
 {
@@ -228,58 +114,58 @@ If refreshing `/notes` gives a 404, create `client/vercel.json`:
 }
 ```
 
-This tells Vercel to serve `index.html` for all routes, letting React Router handle the routing client-side.
-
-```bash
-git add client/vercel.json
-git commit -m "fix: add Vercel rewrites for client-side routing"
-git push
-```
+> **Why this is needed:** React Router handles navigation client-side. If a user goes directly to `https://yourapp.vercel.app/notes` (or refreshes on that page), Vercel tries to find a `/notes` file — which doesn't exist. The rewrite sends all paths to `index.html`, letting React Router handle routing.
 
 ---
 
-## Step 7: Commit and Push
+## 6. Update CORS
 
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
+Set `CORS_ORIGIN` on your backend to your Vercel URL:
+
+```
+CORS_ORIGIN=https://vault-note.vercel.app
+```
+
+> ⚠️ **No trailing slash!** This is the #1 production deployment bug.
+
+---
+
+## 7. Verify Production
+
+1. Register a new account
+2. Log in
+3. Create notes
+4. Log out and log back in — notes should persist
+5. Register a second account — verify cross-user isolation
+6. Open DevTools → Application → Local Storage — verify token is stored
+
+### Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| CORS error | Trailing slash in CORS_ORIGIN | Remove trailing slash |
+| 401 on all requests | JWT_SECRET mismatch between local/prod | Ensure production JWT_SECRET is set |
+| React Router 404 on refresh | Missing vercel.json | Add the rewrites configuration |
+| `TS7016: Could not find declaration file` | @types in devDependencies | Move to dependencies |
+| `Cannot find name 'process'` | Missing `"types": ["node"]` in tsconfig | Add it |
+| Login works but notes fail | VITE_API_URL wrong or missing | Check the environment variable in Vercel |
+
+---
+
+## 8. Commit
 
 ```bash
 git add .
-git commit -m "docs: add deployment configuration and live URLs"
-git push
+git commit -m "feat: deploy VaultNote with secret management"
 ```
 
 ---
 
-> [!TIP]
-> ## Spatial Check-In
-
-1. **Why must JWT_SECRET be different in production vs development?**
-
-<details><summary>Answer</summary>
-
-If the production secret is the same as the dev secret (which is in your .env file on your laptop), anyone with access to your computer can forge production tokens. A unique, random production secret limits the blast radius.
-
-</details>
-
-2. **Why do we need a Vercel rewrite rule for React Router?**
-
-<details><summary>Answer</summary>
-
-When a user visits `/notes` directly (or refreshes), Vercel looks for a file at that path. It doesn't exist — it's a client-side route. The rewrite tells Vercel to serve `index.html` for all paths, letting React Router determine what to render.
-
-</details>
-
-3. **What environment variables does the backend need in production?**
-
-<details><summary>Answer</summary>
-
-DATABASE_URL (Internal), CORS_ORIGIN (Vercel URL), JWT_SECRET (random hex string), JWT_EXPIRES_IN, NODE_ENV=production.
-
-</details>
+> **Session Break** — Deployed with authentication!
+> When you return, you'll review your skills in [Step 8 — Growth Review](../08-growth/).
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 06 — Building the Frontend](../06-frontend/) | [Level 3 Overview](../) | [08 — Growth Review →](../08-growth/) |
+| | |
+|:---|---:|
+| [← Step 6: Frontend](../06-frontend/) | [Step 8 — Growth Review →](../08-growth/) |

@@ -1,152 +1,124 @@
-`Level 1` **Step 4 of 7** — Building the Frontend
-
-# 04 — Building the Frontend
+# Step 4 — Building the Frontend
 
 ## Spatial Orientation
 
 ```
 dev-pulse/
-├── client/          ← ★ WE ARE HERE ★
-│   └── src/
-│       ├── components/     ← UI building blocks (we'll build these)
-│       │   ├── EntryForm.tsx
-│       │   ├── EntryList.tsx
-│       │   └── MoodChart.tsx
-│       ├── services/       ← Backend communication (we'll build this)
-│       │   └── api.ts
-│       ├── types/          ← Shared types (we'll build this)
-│       │   └── index.ts
-│       ├── App.tsx         ← Root component (we'll rewrite this)
-│       ├── App.css         ← Styles (we'll rewrite this)
-│       └── main.tsx        ← Entry point (leave as is)
-└── server/          ← Already built ✓
+├── server/                ← Built in Step 3 (untouched this step)
+└── client/                ← YOU ARE HERE
+    └── src/
+        ├── types/
+        │   └── index.ts     ← Shared type definitions
+        ├── services/
+        │   └── api.ts       ← HTTP calls to backend
+        ├── components/
+        │   ├── EntryForm.tsx  ← Form for new entries
+        │   ├── EntryList.tsx  ← Display all entries
+        │   └── MoodChart.tsx  ← Mood visualization
+        ├── App.tsx            ← Root component
+        ├── App.css            ← Styles
+        └── main.tsx           ← Entry point (untouched)
 ```
 
-**What layer are we in?** The CLIENT layer. This code runs in the user's web browser. It's what they see and interact with. It sends HTTP requests to the backend to get and send data.
+You're working in `client/src/`. The backend doesn't know or care what your frontend looks like — it just responds to HTTP requests.
 
 ---
 
-## How React Works (The Mental Model)
+## React Concepts You Need
 
-Before writing components, understand what React does:
+Before writing components, understand these four concepts:
 
-```
-1. YOU DEFINE COMPONENTS
-   │  Components are functions that return JSX (HTML-like syntax)
-   │  Each component manages its own state (data that can change)
-   │
-2. REACT BUILDS A VIRTUAL DOM
-   │  React creates a lightweight copy of the page in memory
-   │  This is fast because it's just JavaScript objects, not real DOM
-   │
-3. WHEN STATE CHANGES, REACT RE-RENDERS
-   │  You call setState → React compares old and new virtual DOMs
-   │  Only the parts that actually changed get updated in the real DOM
-   │
-4. THE USER SEES THE UPDATE
-   The browser paints the updated DOM to the screen
-```
+> **Key Concept: Component**
+> A component is a reusable piece of UI — a function that returns JSX (HTML-like syntax). Think of it like a LEGO brick: each one has a specific shape and purpose, and you combine them to build something larger.
 
-> [!NOTE]
-> **Technical**: React is a declarative, component-based UI library that manages DOM updates through a virtual DOM reconciliation algorithm. State changes trigger re-renders, where React diffs the virtual DOM and applies minimal DOM mutations.
+> **Key Concept: Props**
+> Props are inputs to a component — data passed from a parent component to a child. Think of them like function arguments: the parent decides what data to pass, and the child uses it. Props are read-only — the child cannot modify them.
 
-> [!NOTE]
-> **Plain English**: You tell React "here's what the screen should look like for this data." When the data changes, React figures out the smallest possible change to the actual page and makes it. You never manually update the page — React does it for you.
+> **Key Concept: useState**
+> `useState` is a React hook that lets a component remember data between renders. When state changes, the component re-renders to reflect the new data. Think of it like a component's private notepad — it can write notes to itself and read them back later.
 
-### Why React (Not Vue, Not Svelte, Not Angular)
-
-- **React over Vue**: React has a larger job market, larger ecosystem, and more learning resources. Vue is excellent and some prefer its simplicity, but React proficiency is more broadly demanded by employers.
-- **React over Angular**: Angular is a full framework with strong opinions. React is a library — it does one thing (UI) and lets you choose everything else. This teaches you to understand each piece rather than relying on a framework's magic.
-- **React over Svelte**: Svelte compiles away at build time and has less runtime overhead. But its ecosystem is smaller, fewer jobs require it, and React's patterns (components, state, effects) are more transferable to other frameworks.
+> **Key Concept: useEffect**
+> `useEffect` runs code after the component renders. It's used for "side effects" — things that happen outside of rendering, like fetching data from an API, setting up timers, or updating the document title. Think of it like a post-it note that says "after you're done rendering, also do this."
 
 ---
 
-## Step 1: Define Shared Types
+## 1. Define Frontend Types
 
-**Where?** `client/src/types/index.ts`
+Your frontend needs the same type definitions as the backend to ensure consistency.
 
-These types match what the backend sends and receives. Having the same types on both sides ensures the frontend and backend agree on data shapes.
+### 🏗️ Your Turn
 
-First, create the folder structure. Open your terminal:
+Create the frontend types file. It should match the backend types from Step 3, plus add types for the moods and a type for creating entries.
 
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+<details>
+<summary>See the solution</summary>
 
-```bash
-mkdir -p client/src/types
-mkdir -p client/src/services
-mkdir -p client/src/components
-```
-
-Now in VS Code, create a new file at `client/src/types/index.ts` (right-click on the `client/src/types` folder → New File → name it `index.ts`).
-
-Add this code to `client/src/types/index.ts`:
+Create `client/src/types/index.ts`:
 
 ```typescript
 export interface MoodEntry {
   id: number;
-  mood: 'happy' | 'neutral' | 'frustrated' | 'tired' | 'energized';
+  mood: Mood;
   energy: number;
   note: string;
+  date: string;
   createdAt: string;
 }
 
-export interface CreateEntryRequest {
-  mood: MoodEntry['mood'];
-  energy: number;
-  note: string;
-}
+export type Mood = 'happy' | 'neutral' | 'sad' | 'frustrated' | 'energized';
+
+export type CreateEntryRequest = Omit<MoodEntry, 'id' | 'createdAt'>;
+
+export const MOODS: Mood[] = ['happy', 'neutral', 'sad', 'frustrated', 'energized'];
+
+export const MOOD_EMOJI: Record<Mood, string> = {
+  happy: '😊',
+  neutral: '😐',
+  sad: '😢',
+  frustrated: '😤',
+  energized: '⚡',
+};
 ```
 
-**Note**: These are identical to the backend types. In a real monorepo, you might share a single types package. For now, duplicating them is fine — it reinforces the concept that frontend and backend are separate systems that must agree on a contract.
+</details>
+
+**Why duplicate types between frontend and backend?** In a monorepo, you could share a types package. But keeping them separate for now teaches you that the frontend and backend are independent applications that communicate through a contract (the API). The types on each side describe what that contract looks like.
 
 ---
 
-## Step 2: Build the API Service
+## 2. Build the API Service
 
-**Where?** `client/src/services/api.ts`
+> **Key Concept: Service Layer**
+> A service layer is a file that handles all communication with an external system (like your API). Instead of scattering `fetch()` calls throughout your components, you centralize them in one place. Benefits: (1) Change the API URL in one place. (2) Add error handling consistently. (3) Components stay focused on UI, not networking.
 
-**What is this file?** It contains all functions that communicate with the backend. By putting these in one place, your components don't need to know about URLs, HTTP methods, or fetch syntax — they just call `getEntries()` or `createEntry(data)`.
+### 🏗️ Your Turn
 
-In VS Code, create a new file at `client/src/services/api.ts` (right-click on the `client/src/services` folder → New File → name it `api.ts`).
+Create the API service. It needs two functions:
+- `getEntries()` — Fetch all entries from the API
+- `createEntry(data)` — Send a new entry to the API
 
-Add this code to `client/src/services/api.ts`:
+Think about: What URL do you fetch from? What HTTP method and headers do you use? What do you do if the response isn't OK?
+
+<details>
+<summary>See the solution</summary>
+
+Create `client/src/services/api.ts`:
 
 ```typescript
 import { MoodEntry, CreateEntryRequest } from '../types';
 
-// The backend URL — reads from environment variable in production
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
-/**
- * Fetch all mood entries from the backend.
- *
- * What happens:
- * 1. Sends GET request to /api/entries
- * 2. Backend queries its data store
- * 3. Backend sends back JSON array of entries
- * 4. We parse the JSON and return it as typed data
- */
 export async function getEntries(): Promise<MoodEntry[]> {
   const response = await fetch(`${API_URL}/entries`);
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch entries: ${response.statusText}`);
+    throw new Error(`Failed to fetch entries: ${response.status}`);
   }
 
   return response.json();
 }
 
-/**
- * Create a new mood entry.
- *
- * What happens:
- * 1. Sends POST request to /api/entries with the entry data
- * 2. Backend validates the data
- * 3. Backend creates the entry and assigns an ID
- * 4. Backend sends back the created entry
- * 5. We return the created entry
- */
 export async function createEntry(data: CreateEntryRequest): Promise<MoodEntry> {
   const response = await fetch(`${API_URL}/entries`, {
     method: 'POST',
@@ -157,100 +129,81 @@ export async function createEntry(data: CreateEntryRequest): Promise<MoodEntry> 
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to create entry');
+    const errorData = await response.json().catch(() => ({ errors: ['Request failed'] }));
+    throw new Error(errorData.errors?.join(', ') || 'Failed to create entry');
   }
 
   return response.json();
 }
 ```
 
-### Key Concepts
+</details>
 
-**`fetch()`**
-- > [!NOTE]
-> **Technical**: The Fetch API provides a JavaScript interface for making HTTP requests and processing responses. It returns Promises.
-- > [!NOTE]
-> **Plain English**: `fetch` is JavaScript's built-in way to send HTTP requests. You give it a URL and options, and it sends the request and gives you back the response.
+**Line-by-line breakdown:**
 
-**`async/await`**
-- > [!NOTE]
-> **Technical**: async/await is syntactic sugar over Promises, allowing asynchronous code to be written in a synchronous style.
-- > [!NOTE]
-> **Plain English**: HTTP requests take time (the data has to travel over the network). `await` says "pause here until the response comes back." Without it, the code would continue before the data arrives.
+| Line | What It Does | Why |
+|------|-------------|-----|
+| `import.meta.env.VITE_API_URL` | Read API URL from environment variable | Different URLs for development (`localhost:3001`) vs production (your Render URL) |
+| `\|\| 'http://localhost:3001/api'` | Fallback for local development | So you don't need a `.env` file just to run locally |
+| `if (!response.ok)` | Check if status is 2xx | A 400 or 500 response is NOT an exception — `fetch` only throws on network failures. You must check manually. |
+| `'Content-Type': 'application/json'` | Tell the server you're sending JSON | Without this header, the server can't parse your request body |
+| `JSON.stringify(data)` | Convert JavaScript object to JSON string | `fetch` doesn't auto-convert objects. You must serialize them. |
+| `return response.json()` | Parse the JSON response into a JavaScript object | The response body is a text stream. `.json()` parses it. |
 
-**`import.meta.env.VITE_API_URL`**
-- > [!NOTE]
-> **Technical**: Vite exposes environment variables prefixed with `VITE_` through `import.meta.env`.
-- > [!NOTE]
-> **Plain English**: In development, the backend is at `localhost:3001`. In production, it's at a different URL. This reads the URL from an environment variable so the code works in both places without changes. Vite requires the prefix `VITE_` for security — it prevents accidentally exposing server-only env vars in browser code.
+> ⚠️ **Common Mistake: `fetch` doesn't throw on HTTP errors**
+> Unlike `axios`, `fetch` does NOT throw an error for 400 or 500 responses. It only throws on network failures (no internet, server unreachable). You must check `response.ok` yourself. Forgetting this means errors silently pass through.
 
-**Why a separate service file instead of fetch inside components?**
-- If 5 components need entries, you don't want 5 copies of the fetch logic
-- If the API URL changes, you update one file
-- If you switch from fetch to axios later, you update one file
-- Components focus on UI, services focus on data fetching — separation of concerns
+> ⚠️ **Common Mistake: Forgetting `Content-Type` header**
+> Without `'Content-Type': 'application/json'`, the server receives the body as plain text and `express.json()` can't parse it. Result: `req.body` is `undefined`.
 
 ---
 
-## Step 3: Build the EntryForm Component
+## 3. Build the EntryForm Component
 
-**Where?** `client/src/components/EntryForm.tsx`
+### 🏗️ Your Turn
 
-**What is it?** A form where users select their mood, energy level, and write a note. When submitted, it calls the API to create a new entry.
+Build a form component that:
+- Has inputs for mood (select/dropdown), energy (1-5 buttons or number input), note (text), and date
+- Validates that all fields are filled before submitting
+- Calls `onSubmit(data)` when the form is submitted
+- Clears the form after successful submission
+- Shows a loading state while submitting
 
-In VS Code, create a new file at `client/src/components/EntryForm.tsx` (right-click on the `client/src/components` folder → New File → name it `EntryForm.tsx`).
+Think about: What state does this component need? How do you prevent the default form submission behavior? How do you handle the submit button during loading?
 
-Add this code to `client/src/components/EntryForm.tsx`:
+<details>
+<summary>See the solution</summary>
+
+Create `client/src/components/EntryForm.tsx`:
 
 ```tsx
-import { useState } from 'react';
-import { CreateEntryRequest, MoodEntry } from '../types';
-
-// The five mood options with display labels and emoji
-const MOOD_OPTIONS: { value: MoodEntry['mood']; label: string }[] = [
-  { value: 'happy', label: 'Happy 😊' },
-  { value: 'energized', label: 'Energized ⚡' },
-  { value: 'neutral', label: 'Neutral 😐' },
-  { value: 'tired', label: 'Tired 😴' },
-  { value: 'frustrated', label: 'Frustrated 😤' },
-];
+import { useState, FormEvent } from 'react';
+import { CreateEntryRequest, Mood, MOODS, MOOD_EMOJI } from '../types';
 
 interface EntryFormProps {
   onSubmit: (data: CreateEntryRequest) => Promise<void>;
 }
 
 export function EntryForm({ onSubmit }: EntryFormProps) {
-  // ─── STATE ─────────────────────────────────────────────────
-  // Each piece of form data gets its own state variable.
-  // When the user types or selects something, the state updates,
-  // and React re-renders the component to reflect the change.
-  const [mood, setMood] = useState<MoodEntry['mood']>('neutral');
+  const [mood, setMood] = useState<Mood>('neutral');
   const [energy, setEnergy] = useState(3);
   const [note, setNote] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // ─── FORM SUBMISSION ───────────────────────────────────────
-  const handleSubmit = async (e: React.FormEvent) => {
-    // Prevent the browser's default form behavior (page reload)
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-
-    // Client-side validation (for quick user feedback)
-    if (note.trim().length === 0) {
-      setError('Please write a note about your day');
-      return;
-    }
-
-    setIsSubmitting(true);
     setError('');
+    setIsSubmitting(true);
 
     try {
-      await onSubmit({ mood, energy, note: note.trim() });
+      await onSubmit({ mood, energy, note, date });
       // Reset form on success
       setMood('neutral');
       setEnergy(3);
       setNote('');
+      setDate(new Date().toISOString().split('T')[0]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -258,64 +211,58 @@ export function EntryForm({ onSubmit }: EntryFormProps) {
     }
   };
 
-  // ─── RENDER ────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit} className="entry-form">
       <h2>How are you feeling?</h2>
 
-      {/* Mood Selection */}
+      {error && <p className="error">{error}</p>}
+
       <div className="mood-selector">
-        {MOOD_OPTIONS.map((option) => (
+        {MOODS.map((m) => (
           <button
-            key={option.value}
+            key={m}
             type="button"
-            className={`mood-button ${mood === option.value ? 'active' : ''}`}
-            onClick={() => setMood(option.value)}
+            className={`mood-btn ${mood === m ? 'active' : ''}`}
+            onClick={() => setMood(m)}
           >
-            {option.label}
+            {MOOD_EMOJI[m]} {m}
           </button>
         ))}
       </div>
 
-      {/* Energy Level */}
       <div className="energy-selector">
-        <label htmlFor="energy">
-          Energy Level: <strong>{energy}</strong>/5
-        </label>
+        <label>Energy Level: {energy}/5</label>
         <input
-          id="energy"
           type="range"
-          min={1}
-          max={5}
-          step={1}
+          min="1"
+          max="5"
           value={energy}
           onChange={(e) => setEnergy(Number(e.target.value))}
         />
       </div>
 
-      {/* Note */}
-      <div className="note-input">
-        <label htmlFor="note">What happened today?</label>
+      <div className="form-field">
+        <label htmlFor="note">Note</label>
         <textarea
           id="note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Solved a tricky bug, learned about TypeScript generics..."
+          placeholder="What happened today?"
           rows={3}
-          maxLength={500}
         />
-        <span className="char-count">{note.length}/500</span>
       </div>
 
-      {/* Error Message */}
-      {error && <p className="error-message">{error}</p>}
+      <div className="form-field">
+        <label htmlFor="date">Date</label>
+        <input
+          id="date"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+      </div>
 
-      {/* Submit Button */}
-      <button
-        type="submit"
-        className="submit-button"
-        disabled={isSubmitting}
-      >
+      <button type="submit" className="submit-btn" disabled={isSubmitting}>
         {isSubmitting ? 'Saving...' : 'Log Entry'}
       </button>
     </form>
@@ -323,67 +270,59 @@ export function EntryForm({ onSubmit }: EntryFormProps) {
 }
 ```
 
-### React Concepts Explained
+</details>
 
-**`useState`**
-- > [!NOTE]
-> **Technical**: `useState` is a React Hook that declares a state variable. It returns a pair: the current state value and a function to update it. When the state updates, React re-renders the component.
-- > [!NOTE]
-> **Plain English**: It's a variable that React "watches." When you change it (using the setter function), React automatically updates the screen to show the new value. Normal variables don't trigger re-renders.
+**Key patterns explained:**
 
-```typescript
-const [mood, setMood] = useState<MoodEntry['mood']>('neutral');
-//     │       │                  │                    │
-//     │       │                  │                    └── Initial value
-//     │       │                  └── Type annotation (TypeScript)
-//     │       └── Function to update the value
-//     └── Current value
-```
+| Pattern | What It Does | Why |
+|---------|-------------|-----|
+| `e.preventDefault()` | Stops the browser's default form submission (which would reload the page) | React handles submissions, not the browser |
+| `try/catch/finally` | Handle success, errors, and cleanup | `finally` runs whether or not there was an error — perfect for resetting `isSubmitting` |
+| `disabled={isSubmitting}` | Prevent double-clicks while saving | Without this, users can spam the submit button and create duplicate entries |
+| `type="button"` on mood buttons | Prevents these buttons from submitting the form | By default, buttons inside a form have `type="submit"`. Only the actual submit button should submit. |
+| `err instanceof Error ? err.message : 'Something went wrong'` | Safely extract the error message | Not all thrown values are Error objects. This handles both cases. |
 
-**`React.FormEvent` and `e.preventDefault()`**
-- HTML forms by default reload the page on submit. This is old web behavior from before JavaScript existed. `e.preventDefault()` stops that reload so React stays in control.
+### 🧠 Debugging Exercise
 
-**Props (`{ onSubmit }: EntryFormProps`)**
-- > [!NOTE]
-> **Technical**: Props are arguments passed to React components, typed by an interface. They flow one direction: parent to child.
-- > [!NOTE]
-> **Plain English**: Props are how a parent component sends data or functions to a child component. The `EntryForm` doesn't know how to save an entry — its parent (App) passes in an `onSubmit` function that handles that.
+What would happen if you forgot `e.preventDefault()` in the `handleSubmit` function?
 
-**Why `onSubmit` is a prop (not hardcoded)**:
-- The form's job is to collect data and call a function. It shouldn't know about HTTP or APIs.
-- The parent component (App) coordinates between the form and the API service.
-- This makes the form reusable — you could use it in a different app with a different backend.
+<details>
+<summary>Answer</summary>
+
+The browser would handle the form submission natively: it would serialize the form data, make a GET request to the current URL with the data as query parameters, and reload the page. Your `fetch` call might not even complete before the page refreshes. React loses all state, and the user sees the page flash. Always call `e.preventDefault()` in React form handlers.
+
+</details>
 
 ---
 
-## Step 4: Build the EntryList Component
+## 4. Build the EntryList Component
 
-**Where?** `client/src/components/EntryList.tsx`
+### 🏗️ Your Turn
 
-In VS Code, create a new file at `client/src/components/EntryList.tsx` (right-click on the `client/src/components` folder → New File → name it `EntryList.tsx`).
+Build a component that displays a list of mood entries. Each entry should show:
+- The mood emoji and name
+- The energy level
+- The note
+- The date
 
-Add this code to `client/src/components/EntryList.tsx`:
+Think about: What if there are no entries? The component should handle that gracefully.
+
+<details>
+<summary>See the solution</summary>
+
+Create `client/src/components/EntryList.tsx`:
 
 ```tsx
-import { MoodEntry } from '../types';
+import { MoodEntry, MOOD_EMOJI } from '../types';
 
 interface EntryListProps {
   entries: MoodEntry[];
 }
 
-// Map mood values to display emojis
-const MOOD_EMOJI: Record<MoodEntry['mood'], string> = {
-  happy: '😊',
-  energized: '⚡',
-  neutral: '😐',
-  tired: '😴',
-  frustrated: '😤',
-};
-
 export function EntryList({ entries }: EntryListProps) {
   if (entries.length === 0) {
     return (
-      <div className="entry-list-empty">
+      <div className="empty-state">
         <p>No entries yet. Log your first mood above!</p>
       </div>
     );
@@ -391,27 +330,19 @@ export function EntryList({ entries }: EntryListProps) {
 
   return (
     <div className="entry-list">
-      <h2>Your Mood History</h2>
+      <h2>Your Entries</h2>
       {entries.map((entry) => (
         <div key={entry.id} className="entry-card">
           <div className="entry-header">
             <span className="entry-mood">
               {MOOD_EMOJI[entry.mood]} {entry.mood}
             </span>
-            <span className="entry-energy">
-              Energy: {'●'.repeat(entry.energy)}{'○'.repeat(5 - entry.energy)}
-            </span>
+            <span className="entry-date">{entry.date}</span>
           </div>
-          <p className="entry-note">{entry.note}</p>
-          <time className="entry-date">
-            {new Date(entry.createdAt).toLocaleDateString('en-US', {
-              weekday: 'short',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </time>
+          <div className="entry-energy">
+            Energy: {'⚡'.repeat(entry.energy)}{'○'.repeat(5 - entry.energy)}
+          </div>
+          {entry.note && <p className="entry-note">{entry.note}</p>}
         </div>
       ))}
     </div>
@@ -419,89 +350,64 @@ export function EntryList({ entries }: EntryListProps) {
 }
 ```
 
-### Concepts
+</details>
 
-**`entries.map()`**
-- > [!NOTE]
-> **Technical**: `Array.map()` transforms each element and returns a new array. In JSX, it's used to render a list of elements from an array of data.
-- > [!NOTE]
-> **Plain English**: "For each entry in the array, create a card." If there are 3 entries, you get 3 cards. If there are 100, you get 100. React handles the rendering.
+**Key patterns:**
 
-**`key={entry.id}`**
-- > [!NOTE]
-> **Technical**: React uses the `key` prop to identify elements in a list, enabling efficient re-rendering by tracking which items changed, were added, or were removed.
-- > [!NOTE]
-> **Plain English**: When the list changes (new entry added, one removed), React needs to know which items are which. The `key` tells React "this card belongs to entry #3." Without it, React has to guess, which can cause bugs and slow rendering.
-
-**`Record<MoodEntry['mood'], string>`**
-- > [!NOTE]
-> **Technical**: `Record<K, V>` is a TypeScript utility type that creates an object type with keys of type K and values of type V.
-- > [!NOTE]
-> **Plain English**: "An object where every mood value has a corresponding string." TypeScript will error if you forget a mood — ensuring your emoji map is always complete.
+| Pattern | What It Does | Why |
+|---------|-------------|-----|
+| `key={entry.id}` | Unique identifier for each list item | React uses keys to efficiently update the DOM. Without unique keys, React can't tell which items changed. |
+| `entries.length === 0` check | Show a helpful message when empty | Better UX than showing nothing |
+| `{entry.note && <p>...}` | Only render the note paragraph if there is a note | Avoids empty `<p>` tags |
+| `'⚡'.repeat(entry.energy)` | Visual energy indicator | More readable than just a number |
 
 ---
 
-> [!TIP]
-> **Session Break** — You've built the EntryForm and EntryList components. Save your work and take a break.
-> When you return, you'll build the MoodChart and wire everything together in the App component.
+## 5. Build the MoodChart Component
 
----
+A simple visualization of mood distribution.
 
-## Step 5: Build the MoodChart Component
+<details>
+<summary>See the code</summary>
 
-**Where?** `client/src/components/MoodChart.tsx`
-
-A simple visual summary of mood entries. No chart library — just CSS and HTML.
-
-In VS Code, create a new file at `client/src/components/MoodChart.tsx` (right-click on the `client/src/components` folder → New File → name it `MoodChart.tsx`).
-
-Add this code to `client/src/components/MoodChart.tsx`:
+Create `client/src/components/MoodChart.tsx`:
 
 ```tsx
-import { MoodEntry } from '../types';
+import { MoodEntry, Mood, MOODS, MOOD_EMOJI } from '../types';
 
 interface MoodChartProps {
   entries: MoodEntry[];
 }
 
-const MOOD_COLORS: Record<MoodEntry['mood'], string> = {
-  happy: '#4ade80',
-  energized: '#facc15',
-  neutral: '#94a3b8',
-  tired: '#818cf8',
-  frustrated: '#f87171',
-};
-
 export function MoodChart({ entries }: MoodChartProps) {
   if (entries.length === 0) return null;
 
   // Count occurrences of each mood
-  const moodCounts = entries.reduce(
-    (acc, entry) => {
-      acc[entry.mood] = (acc[entry.mood] || 0) + 1;
+  const moodCounts = MOODS.reduce(
+    (acc, mood) => {
+      acc[mood] = entries.filter((e) => e.mood === mood).length;
       return acc;
     },
-    {} as Record<string, number>
+    {} as Record<Mood, number>,
   );
 
   const maxCount = Math.max(...Object.values(moodCounts));
 
   return (
     <div className="mood-chart">
-      <h2>Mood Overview</h2>
+      <h2>Mood Distribution</h2>
       <div className="chart-bars">
-        {Object.entries(moodCounts).map(([mood, count]) => (
+        {MOODS.map((mood) => (
           <div key={mood} className="chart-bar-container">
             <div
               className="chart-bar"
               style={{
-                height: `${(count / maxCount) * 100}%`,
-                backgroundColor: MOOD_COLORS[mood as MoodEntry['mood']],
+                height: `${maxCount > 0 ? (moodCounts[mood] / maxCount) * 100 : 0}%`,
               }}
-            >
-              <span className="chart-count">{count}</span>
-            </div>
-            <span className="chart-label">{mood}</span>
+            />
+            <span className="chart-label">
+              {MOOD_EMOJI[mood]} {moodCounts[mood]}
+            </span>
           </div>
         ))}
       </div>
@@ -510,21 +416,29 @@ export function MoodChart({ entries }: MoodChartProps) {
 }
 ```
 
----
-
-> [!TIP]
-> **Session Break** — You've built all three display components: EntryForm, EntryList, and MoodChart. Save your work and take a break.
-> When you return, you'll build the App component that wires everything together, add styles, and commit.
+</details>
 
 ---
 
-## Step 6: Build the App Component (Root)
+## 6. Build the App Component
 
-**Where?** `client/src/App.tsx`
+> **Key Concept: Lifting State Up**
+> When multiple components need the same data, that data should live in their closest common parent. The parent "owns" the state and passes it down via props. This is called "lifting state up." In our app, both `EntryList` and `MoodChart` need the entries array, so it lives in `App`.
 
-**What is this file?** The root component that assembles all other components and manages the application state. It's the "conductor" — it holds the data, coordinates the API calls, and passes everything down to child components.
+### 🏗️ Your Turn
 
-In VS Code, open the existing file `client/src/App.tsx` (it was created by Vite — we're replacing its contents). Select all the existing code (`Cmd+A` on macOS / `Ctrl+A` on Windows) and replace it with:
+Build the root `App` component. It needs to:
+1. Hold the `entries` array in state
+2. Fetch entries from the API when the component first loads (`useEffect`)
+3. Handle creating new entries (call the API, then add to state)
+4. Pass data down to child components
+
+Think about: Where do loading and error states live? How do you add a new entry to the state after creating it on the server?
+
+<details>
+<summary>See the solution</summary>
+
+Replace `client/src/App.tsx`:
 
 ```tsx
 import { useState, useEffect } from 'react';
@@ -536,59 +450,48 @@ import { MoodChart } from './components/MoodChart';
 import './App.css';
 
 function App() {
-  // ─── STATE ─────────────────────────────────────────────────
   const [entries, setEntries] = useState<MoodEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // ─── LOAD ENTRIES ON MOUNT ─────────────────────────────────
-  // useEffect with [] runs once when the component first appears.
-  // This is where we load initial data from the backend.
+  // Fetch entries on mount
   useEffect(() => {
+    async function loadEntries() {
+      try {
+        const data = await getEntries();
+        setEntries(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load entries');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     loadEntries();
   }, []);
 
-  async function loadEntries() {
-    try {
-      setIsLoading(true);
-      const data = await getEntries();
-      setEntries(data);
-    } catch (err) {
-      setError('Failed to load entries. Is the backend running?');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  // ─── HANDLE NEW ENTRY ──────────────────────────────────────
-  async function handleCreateEntry(data: CreateEntryRequest) {
+  // Handle new entry
+  const handleSubmit = async (data: CreateEntryRequest): Promise<void> => {
     const newEntry = await createEntry(data);
-    // Add the new entry to the beginning of the list (newest first)
     setEntries((prev) => [newEntry, ...prev]);
+  };
+
+  if (isLoading) {
+    return <div className="loading">Loading...</div>;
   }
 
-  // ─── RENDER ────────────────────────────────────────────────
   return (
     <div className="app">
-      <header className="app-header">
+      <header>
         <h1>DevPulse</h1>
         <p>Track your developer mood</p>
       </header>
 
-      <main className="app-main">
-        <EntryForm onSubmit={handleCreateEntry} />
+      {error && <p className="error">{error}</p>}
 
-        {isLoading && <p className="loading">Loading entries...</p>}
-        {error && <p className="error-message">{error}</p>}
-
-        {!isLoading && !error && (
-          <>
-            <MoodChart entries={entries} />
-            <EntryList entries={entries} />
-          </>
-        )}
-      </main>
+      <EntryForm onSubmit={handleSubmit} />
+      <MoodChart entries={entries} />
+      <EntryList entries={entries} />
     </div>
   );
 }
@@ -596,60 +499,40 @@ function App() {
 export default App;
 ```
 
-### React State Flow (Spatial View)
+</details>
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     App Component                            │
-│                                                              │
-│  State: entries[], isLoading, error                          │
-│                                                              │
-│  ┌────────────────────┐  ┌──────────┐  ┌──────────────────┐ │
-│  │    EntryForm       │  │MoodChart │  │   EntryList      │ │
-│  │                    │  │          │  │                  │ │
-│  │ Props:             │  │ Props:   │  │ Props:           │ │
-│  │  onSubmit (fn)     │  │ entries  │  │  entries         │ │
-│  │                    │  │          │  │                  │ │
-│  │ When user submits: │  │ Reads    │  │ Reads entries    │ │
-│  │ 1. Calls onSubmit  │  │ entries  │  │ and renders      │ │
-│  │ 2. App updates     │  │ and      │  │ each one as      │ │
-│  │    state           │  │ draws    │  │ a card           │ │
-│  │ 3. All children    │  │ bars     │  │                  │ │
-│  │    re-render       │  │          │  │                  │ │
-│  └────────────────────┘  └──────────┘  └──────────────────┘ │
-│                                                              │
-│  Data flows DOWN through props (parent → child)              │
-│  Events flow UP through callbacks (child → parent)           │
-└──────────────────────────────────────────────────────────────┘
-```
+**Important patterns:**
 
-### `useEffect` Explained
+| Pattern | What It Does | Why |
+|---------|-------------|-----|
+| `useEffect(() => { ... }, [])` | Runs once when the component mounts | The empty `[]` dependency array means "run this once, not on every render" |
+| `setEntries((prev) => [newEntry, ...prev])` | Add new entry to the front of the array | Uses the callback form of setState to avoid stale state. New entries appear at the top. |
+| Async function inside useEffect | Handles the async API call | `useEffect` callback can't be async itself, so we define an async function inside and call it immediately |
 
-```typescript
-useEffect(() => {
-  loadEntries();
-}, []);
-```
+> ⚠️ **Common Mistake: Async useEffect**
+> You might try: `useEffect(async () => { ... })`. This doesn't work — React expects useEffect to return either nothing or a cleanup function, not a Promise. Always define the async function inside the effect.
 
-- > [!NOTE]
-> **Technical**: `useEffect` is a React Hook that lets you synchronize a component with an external system. The empty dependency array `[]` means it runs once after the initial render.
-- > [!NOTE]
-> **Plain English**: "When this component appears on screen for the first time, fetch the entries from the backend." The `[]` means "only do this once" — not on every re-render.
+### 🧠 Debugging Exercise
 
-### Why State Lives in App (Not in Each Component)
+What would happen if you wrote `setEntries([newEntry, ...entries])` instead of `setEntries((prev) => [newEntry, ...prev])`?
 
-Both `MoodChart` and `EntryList` need the entries data. If each managed its own copy, they could get out of sync. By lifting state to App (their shared parent), there's one source of truth. When a new entry is added, App updates its state, and both children receive the updated list.
+<details>
+<summary>Answer</summary>
 
-This is called **"lifting state up"** — one of React's core patterns.
+It would work most of the time, but could cause a subtle bug. If `handleSubmit` is called twice quickly (before the first render completes), both calls would read the same `entries` value from the closure. The second call would overwrite the first entry. The callback form `(prev) => [newEntry, ...prev]` always gets the latest state, avoiding this race condition.
+
+</details>
 
 ---
 
-## Step 7: Add Styles
+## 7. Add Styles
 
-In VS Code, open the existing file `client/src/App.css`. Select all existing content (`Cmd+A` / `Ctrl+A`) and replace it with the following:
+Replace `client/src/App.css` with styling for the app. Here's a dark-theme design:
+
+<details>
+<summary>See the full CSS</summary>
 
 ```css
-/* ─── GLOBAL RESET ───────────────────────────────────────── */
 * {
   margin: 0;
   padding: 0;
@@ -657,37 +540,33 @@ In VS Code, open the existing file `client/src/App.css`. Select all existing con
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    Oxygen, Ubuntu, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: #0f172a;
   color: #e2e8f0;
   line-height: 1.6;
 }
 
-/* ─── APP LAYOUT ─────────────────────────────────────────── */
 .app {
   max-width: 700px;
   margin: 0 auto;
   padding: 2rem 1rem;
 }
 
-.app-header {
+header {
   text-align: center;
   margin-bottom: 2rem;
 }
 
-.app-header h1 {
-  font-size: 2.5rem;
+header h1 {
+  font-size: 2rem;
   color: #38bdf8;
-  margin-bottom: 0.25rem;
 }
 
-.app-header p {
+header p {
   color: #94a3b8;
-  font-size: 1.1rem;
 }
 
-/* ─── ENTRY FORM ─────────────────────────────────────────── */
+/* Form */
 .entry-form {
   background: #1e293b;
   border-radius: 12px;
@@ -697,17 +576,17 @@ body {
 
 .entry-form h2 {
   margin-bottom: 1rem;
-  font-size: 1.25rem;
+  font-size: 1.2rem;
 }
 
 .mood-selector {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
-.mood-button {
+.mood-btn {
   padding: 0.5rem 1rem;
   border: 2px solid #334155;
   border-radius: 8px;
@@ -718,18 +597,17 @@ body {
   transition: all 0.2s;
 }
 
-.mood-button:hover {
+.mood-btn:hover {
   border-color: #38bdf8;
 }
 
-.mood-button.active {
+.mood-btn.active {
   border-color: #38bdf8;
-  background: #38bdf8;
-  color: #0f172a;
+  background: #0c4a6e;
 }
 
 .energy-selector {
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .energy-selector label {
@@ -738,70 +616,106 @@ body {
   color: #94a3b8;
 }
 
-.energy-selector input[type='range'] {
+.energy-selector input[type="range"] {
   width: 100%;
   accent-color: #38bdf8;
 }
 
-.note-input {
-  margin-bottom: 1.25rem;
+.form-field {
+  margin-bottom: 1rem;
 }
 
-.note-input label {
+.form-field label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
   color: #94a3b8;
+  font-size: 0.9rem;
 }
 
-.note-input textarea {
+.form-field textarea,
+.form-field input {
   width: 100%;
-  padding: 0.75rem;
-  border: 2px solid #334155;
-  border-radius: 8px;
+  padding: 0.6rem;
+  border: 1px solid #334155;
+  border-radius: 6px;
   background: #0f172a;
   color: #e2e8f0;
   font-family: inherit;
-  font-size: 1rem;
-  resize: vertical;
+  font-size: 0.95rem;
 }
 
-.note-input textarea:focus {
+.form-field textarea:focus,
+.form-field input:focus {
   outline: none;
   border-color: #38bdf8;
 }
 
-.char-count {
-  display: block;
-  text-align: right;
-  font-size: 0.8rem;
-  color: #64748b;
-  margin-top: 0.25rem;
-}
-
-.submit-button {
+.submit-btn {
   width: 100%;
   padding: 0.75rem;
+  background: #0ea5e9;
+  color: white;
   border: none;
   border-radius: 8px;
-  background: #38bdf8;
-  color: #0f172a;
   font-size: 1rem;
-  font-weight: 600;
   cursor: pointer;
   transition: background 0.2s;
 }
 
-.submit-button:hover {
-  background: #7dd3fc;
+.submit-btn:hover:not(:disabled) {
+  background: #0284c7;
 }
 
-.submit-button:disabled {
-  background: #334155;
-  color: #64748b;
+.submit-btn:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-/* ─── MOOD CHART ─────────────────────────────────────────── */
+/* Entry List */
+.entry-list {
+  margin-top: 2rem;
+}
+
+.entry-list h2 {
+  margin-bottom: 1rem;
+}
+
+.entry-card {
+  background: #1e293b;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.entry-mood {
+  font-size: 1.1rem;
+  text-transform: capitalize;
+}
+
+.entry-date {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.entry-energy {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.entry-note {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+/* Chart */
 .mood-chart {
   background: #1e293b;
   border-radius: 12px;
@@ -811,209 +725,128 @@ body {
 
 .mood-chart h2 {
   margin-bottom: 1rem;
-  font-size: 1.25rem;
+  font-size: 1.2rem;
 }
 
 .chart-bars {
   display: flex;
+  justify-content: space-around;
   align-items: flex-end;
-  gap: 1rem;
   height: 120px;
+  padding-top: 1rem;
 }
 
 .chart-bar-container {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 100%;
-  justify-content: flex-end;
+  gap: 0.5rem;
+  flex: 1;
 }
 
 .chart-bar {
-  width: 100%;
-  border-radius: 6px 6px 0 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 0.25rem;
-  min-height: 24px;
+  width: 40px;
+  background: #0ea5e9;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
   transition: height 0.3s ease;
 }
 
-.chart-count {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #0f172a;
-}
-
 .chart-label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-top: 0.5rem;
-  text-transform: capitalize;
-}
-
-/* ─── ENTRY LIST ─────────────────────────────────────────── */
-.entry-list h2 {
-  margin-bottom: 1rem;
-  font-size: 1.25rem;
-}
-
-.entry-list-empty {
-  text-align: center;
-  padding: 2rem;
-  color: #64748b;
-}
-
-.entry-card {
-  background: #1e293b;
-  border-radius: 12px;
-  padding: 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.entry-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
-.entry-mood {
-  font-size: 1.1rem;
-  text-transform: capitalize;
-  font-weight: 500;
-}
-
-.entry-energy {
-  color: #facc15;
-  font-size: 0.9rem;
-  letter-spacing: 2px;
-}
-
-.entry-note {
-  color: #cbd5e1;
-  margin-bottom: 0.5rem;
-}
-
-.entry-date {
   font-size: 0.8rem;
-  color: #64748b;
+  color: #94a3b8;
+  text-align: center;
 }
 
-/* ─── UTILITY ────────────────────────────────────────────── */
+/* States */
 .loading {
   text-align: center;
-  padding: 2rem;
+  padding: 4rem;
   color: #64748b;
 }
 
-.error-message {
-  color: #f87171;
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
+.error {
+  background: #450a0a;
+  color: #fca5a5;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #64748b;
 }
 ```
 
+</details>
+
 ---
 
-## Step 8: Clean Up Boilerplate
+## 8. Clean Up index.html
 
-Delete files that Vite generated that we don't need. Open your terminal:
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
-
-```bash
-rm client/src/assets/react.svg
-rm client/public/vite.svg
-```
-
-(These paths are relative to `dev-pulse/`. If you're inside `client/`, the paths would be `src/assets/react.svg` and `public/vite.svg` instead.)
-
-Now in VS Code, open `client/index.html` and replace its contents with:
+Update `client/index.html` — change the `<title>`:
 
 ```html
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DevPulse — Developer Mood Tracker</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<title>DevPulse — Developer Mood Tracker</title>
 ```
+
+Also delete the default Vite/React boilerplate CSS files if they exist (`client/src/index.css`) and remove any import of `index.css` from `main.tsx`.
 
 ---
 
-## Step 9: Commit
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+## 9. Commit
 
 ```bash
-git add client/
-git commit -m "feat: add React frontend with mood entry form and list"
+git add .
+git commit -m "feat: add React frontend with EntryForm, EntryList, and MoodChart"
 ```
+
+### ✅ Checkpoint
+
+Run the frontend (`cd client && npm run dev`). You should see:
+- [ ] The DevPulse header
+- [ ] A mood selection form with emoji buttons
+- [ ] An energy slider
+- [ ] A note text area and date picker
+- [ ] A "Log Entry" submit button
+
+The form won't actually save data yet — that happens when we connect the frontend to the backend in Step 5. But the UI should render without errors.
+
+If you open the browser console (F12 → Console) and see errors:
+- `Module not found`: Check your import paths
+- `X is not a function`: Check that you're exporting and importing correctly
+- `Cannot find module './types'`: Make sure you created the types file at the right path
 
 ---
 
-The frontend exists but **cannot talk to the backend yet** (we need to run both simultaneously). Let's verify you understand the state flow:
+## 🧠 Spatial Check-In
 
-```
-User clicks "Log Entry"
-        │
-        ▼
-EntryForm calls onSubmit(data)        ← event flows UP to parent
-        │
-        ▼
-App.handleCreateEntry runs
-        │
-        ├── Calls createEntry(data)   ← sends HTTP POST to backend
-        │
-        ▼
-Backend processes request, returns new entry
-        │
-        ▼
-App calls setEntries([newEntry, ...prev])  ← state updates
-        │
-        ▼
-React re-renders App and all children
-        │
-        ├── EntryList receives updated entries → shows new card
-        └── MoodChart receives updated entries → updates bars
-```
+1. In our App component, why does `entries` state live in `App` and not in `EntryList`? What if we also wanted a `MoodChart` component to show mood statistics?
 
-**Data flows DOWN through props. Events flow UP through callbacks. State changes trigger re-renders.**
+2. What is the purpose of the `[]` (empty array) at the end of `useEffect(() => { ... }, [])`? What would happen if you removed it?
 
----
+3. Why do we define an async function *inside* useEffect instead of making the useEffect callback itself async?
 
-> [!TIP]
-> ## Spatial Check-In
+<details>
+<summary>Check Your Answers</summary>
 
-1. **What is the difference between props and state?**
+1. **Lifting state up.** Both `EntryList` and `MoodChart` need the entries data. If entries lived in `EntryList`, `MoodChart` couldn't access it. By keeping entries in their common parent (`App`), we can pass the data to both children via props.
 
-<details><summary>Answer</summary>
+2. **The empty array is the dependency list.** It means "only run this effect once, when the component first mounts." Without it, the effect runs after **every** render, causing an infinite loop: fetch data → update state → re-render → fetch data → update state → ...
 
-Props are data passed from parent to child (read-only). State is data managed inside a component (can change).
-
-</details>
-
-2. **Why do we split the frontend into multiple components instead of one big file?**
-
-<details><summary>Answer</summary>
-
-Separation of concerns. Each component handles one job, making the code easier to read, debug, and modify.
+3. **useEffect expects a cleanup function or nothing as its return value.** An `async` function always returns a Promise. If useEffect returned a Promise, React would try to call it as a cleanup function, which wouldn't work. So we define the async function inside and call it immediately.
 
 </details>
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 03 — Building the Backend](../03-backend/) | [Level 1 Overview](../) | [05 — Connecting Frontend to Backend →](../05-connecting/) |
+> **Session Break** — You've built the frontend UI.
+> When you return, you'll connect the frontend to the backend in [Step 5 — Connecting](../05-connecting/).
+
+---
+
+| | |
+|:---|---:|
+| [← Step 3: Backend](../03-backend/) | [Step 5 — Connecting →](../05-connecting/) |

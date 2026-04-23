@@ -1,292 +1,166 @@
-`Level 3` **Step 1 of 8** — Orientation
+# Step 1 — Orientation: Security and Identity on the Web
 
-# 01 — Orientation: Security and Identity on the Web
+> **Prerequisites:** You must have completed Levels 1 and 2 before starting Level 3.
 
-> [!WARNING]
-> ## Prerequisites Gate
->
-> Level 3 requires **completed and deployed** Level 1 and Level 2 projects. Before continuing, you must have all of the following:
->
-> 1. **Level 1 — DevPulse**: GitHub repo URL + Vercel frontend URL + Render backend health check URL
-> 2. **Level 2 — TaskForge**: GitHub repo URL + Vercel frontend URL + Render backend health check URL (with `database: "connected"`)
->
-> If either project is incomplete, go back and finish it first. Level 3 builds directly on everything from Levels 1 and 2.
+## The Problem We're Solving
 
-### Skills Checklist
+In TaskForge, anyone could create, read, update, or delete any project. There were no user accounts — it was a shared, open application. VaultNote changes this: every note belongs to a specific user, and only that user can access it.
 
-You should be confident with all of the following. If anything feels shaky, review the relevant Level 2 section.
-
-- [ ] Design a database schema with foreign keys
-- [ ] Write SQL for INSERT, SELECT, UPDATE, DELETE
-- [ ] Use parameterized queries to prevent SQL injection
-- [ ] Build Express routes with try/catch and error middleware
-- [ ] Use environment variables with dotenv
-- [ ] Build React components with useState and useEffect
-- [ ] Deploy a three-tier app (frontend + backend + database)
-
-All checked? Time to add security.
-
----
-
-## The Problem: Who Is Making This Request?
-
-In Level 2, TaskForge had a critical flaw:
-
-```
-ANY USER (or bot, or attacker) can:
-  - Create projects
-  - Delete any project
-  - Read anyone's tasks
-  - Delete anyone's tasks
-
-There is NO identity. The server has NO idea who is making a request.
-```
-
-This is fine for a learning project, but it's a dealbreaker for real applications. Imagine if Gmail let anyone read anyone's emails, or if your bank let anyone transfer money from any account.
-
-**Authentication** answers the question: "Who are you?"
-**Authorization** answers the question: "Are you allowed to do this?"
-
-Level 3 adds both.
+This requires answering two fundamental questions:
+1. **Authentication** — "Who are you?" (prove your identity)
+2. **Authorization** — "What are you allowed to do?" (check permissions)
 
 ---
 
 ## Authentication vs Authorization
 
-> [!NOTE]
-> **Technical**: Authentication (authn) is the process of verifying a user's identity — confirming they are who they claim to be. Authorization (authz) is the process of determining what an authenticated user is permitted to do.
+> **Key Concept: Authentication (AuthN)**
+> Verifying *who* someone is. "You claim to be user@example.com — prove it by providing the correct password." Think of it like showing your ID at the door.
 
-> [!NOTE]
-> **Plain English**: Authentication is checking someone's ID at the door. Authorization is checking whether their ID grants them access to the VIP section. You must authenticate first (prove who you are), then the system authorizes you (decides what you can do).
+> **Key Concept: Authorization (AuthZ)**
+> Verifying *what* someone is allowed to do. "You are user@example.com — but are you allowed to delete this note?" Think of it like a keycard system: your ID gets you in the building (authentication), but your keycard only opens certain doors (authorization).
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│  AUTHENTICATION (Who are you?)                              │
-│  ─────────────────────────────                              │
-│  "I'm user@example.com"                                    │
-│  "Prove it" → password check → JWT token issued             │
-│                                                             │
-│  AUTHORIZATION (What can you do?)                           │
-│  ────────────────────────────────                           │
-│  "I want to see note #5"                                    │
-│  "Is note #5 yours?" → check user_id → yes → here it is   │
-│  "Is note #5 yours?" → check user_id → no → 403 Forbidden │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+1. User sends email + password     → Authentication ("who are you?")
+2. Server verifies credentials     → Authentication
+3. Server creates JWT token        → Authentication
+4. User sends token with request   → "I'm user #5"
+5. Server checks: "Is user #5     → Authorization ("can you do this?")
+   allowed to access note #12?"
 ```
 
 ---
 
 ## Trust Boundaries
 
-This is the most important security concept. A **trust boundary** is the line between what you control and what you don't.
+> **Key Concept: Trust Boundary**
+> A trust boundary separates code you control from code the user controls. Everything in the browser is on the user's side — they can modify JavaScript, edit localStorage, forge HTTP requests. Everything on the server is on your side — the user can't touch it directly.
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        TRUSTED ZONE                               │
-│                  (You control this code)                          │
-│                                                                  │
-│   ┌──────────────────┐        ┌──────────────────────────┐      │
-│   │     BACKEND       │        │       DATABASE            │      │
-│   │  Express server   │  SQL   │    PostgreSQL             │      │
-│   │  Your code runs   │◀─────▶│    Your schema            │      │
-│   │  here              │        │    Your data              │      │
-│   └────────┬─────────┘        └──────────────────────────┘      │
-│            │                                                     │
-│════════════╪═════════════════════════════════════════════════════│
-│            │         TRUST BOUNDARY                              │
-│════════════╪═════════════════════════════════════════════════════│
-│            │                                                     │
-│   ┌────────▼─────────┐                                          │
-│   │     FRONTEND      │        UNTRUSTED ZONE                    │
-│   │  Browser (React)  │        (User controls this)             │
-│   │                  │                                          │
-│   │  User can:       │        - Inspect all JavaScript          │
-│   │  - Read all JS   │        - Modify localStorage             │
-│   │  - Edit localStorage      - Send any HTTP request           │
-│   │  - Use DevTools  │        - Forge request headers           │
-│   │  - Modify requests│        - Call your API from curl          │
-│   └──────────────────┘                                          │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+                    UNTRUSTED ZONE (browser)
+                    ├── React components
+                    ├── localStorage (token storage)
+                    ├── Form data
+                    └── JavaScript code (user can modify!)
+─────────────────────── TRUST BOUNDARY ────────────────────
+                    TRUSTED ZONE (server)
+                    ├── Auth middleware (validates tokens)
+                    ├── Route handlers (enforce rules)
+                    ├── Database queries (filter by user_id)
+                    └── JWT_SECRET (never exposed)
 ```
 
-**Rules that follow from this:**
+### Three Rules of Trust Boundaries
 
-1. **Never trust data from the frontend.** Always validate on the backend. (You learned this in Level 2.)
-2. **Never store secrets in frontend code.** Anyone can read it. JWT_SECRET lives on the server only.
-3. **Never send passwords in plain text to the database.** Hash them with bcrypt first.
-4. **The backend is the authority.** The frontend can suggest, request, and display — but the backend decides.
-5. **Authentication happens on the backend.** The frontend just sends credentials and stores the token.
+1. **Never trust frontend data** — Always validate on the server
+2. **Never store secrets in frontend code** — No API keys, no JWT secrets, no database URLs
+3. **Never send plain-text passwords** — Hash with bcrypt before storing
+
+### 🧠 Think About It
+
+A developer stores the user's role in localStorage: `{ role: "user" }`. The frontend checks this role to show/hide the admin panel. What's wrong with this approach?
+
+<details>
+<summary>Answer</summary>
+
+Anyone can open DevTools → Application → localStorage and change `"user"` to `"admin"`. The frontend check is trivially bypassed. **Authorization must be enforced on the server.** The frontend can use the role for UI purposes (showing/hiding buttons), but the server must verify the role on every request. The server's JWT contains the role, and the server verifies the JWT signature — the user can't forge that.
+
+</details>
 
 ---
 
-## How Passwords Work (The Right Way)
+## Password Hashing with bcrypt
 
-> [!WARNING]
-> **Never store passwords in plain text.** If your database is breached, every user's password is exposed. Instead, store a **hash** — a one-way transformation that can't be reversed.
+> **Key Concept: Password Hashing**
+> A hash is a one-way transformation — you can turn a password into a hash, but you can never turn the hash back into the password. Think of it like a meat grinder: you can put beef in and get ground beef out, but you can never reconstruct the original cut.
+>
+> **The Threat:** If someone steals your database, they get every row in the users table. Without hashing, they see every password in plain text. With hashing, they see meaningless strings like `$2b$10$N9qo8uLOickgx2ZMRZoMye...`.
 
 ```
-WRONG (plain text):
-───────────────────
-users table:
-│ id │ email              │ password      │
-│  1 │ alice@example.com  │ mypassword123 │  ← If leaked, attacker has the password
-│  2 │ bob@example.com    │ bob_secret    │
+Registration:
+  "mypassword123"  →  bcrypt.hash()  →  "$2b$10$N9qo8uLO..."
+  (stored in database: only the hash, never the password)
 
-RIGHT (bcrypt hash):
-────────────────────
-users table:
-│ id │ email              │ password_hash                                              │
-│  1 │ alice@example.com  │ $2b$10$X7vK9z...q3Fy (60 characters)                      │
-│  2 │ bob@example.com    │ $2b$10$Rp4mA1...kL2w (60 characters)                      │
-                            ↑ Even if leaked, attacker can't reverse this to a password
+Login:
+  "mypassword123"  →  bcrypt.compare(password, hash)  →  true/false
+  (bcrypt re-hashes the input and compares — it doesn't "decrypt")
 ```
 
-> [!NOTE]
-> **Technical**: bcrypt is a password hashing function that incorporates a salt (random data) and a cost factor (work factor). The salt prevents rainbow table attacks. The cost factor makes brute-force attacks computationally expensive. bcrypt.hash() produces a different hash each time for the same input (because of the random salt), but bcrypt.compare() can verify a password against any of its hashes.
+### Why bcrypt (not SHA-256, not MD5)?
 
-> [!NOTE]
-> **Plain English**: bcrypt turns a password into a scrambled string. The scrambling is one-way — you can't unscramble it. When a user logs in, bcrypt doesn't unscramble the stored hash. Instead, it scrambles the password the user just typed and checks if the result matches. If it matches, the password is correct.
+| Algorithm | Speed | Purpose | Safe for Passwords? |
+|-----------|-------|---------|-------------------|
+| MD5 | Extremely fast | File checksums | No — too fast to crack |
+| SHA-256 | Very fast | Data integrity | No — too fast to crack |
+| **bcrypt** | **Intentionally slow** | **Password hashing** | **Yes** |
+
+bcrypt is deliberately slow (configurable via "cost factor"). This means an attacker who steals your database can only try ~100 passwords/second instead of billions. Speed is the enemy when it comes to passwords.
 
 ---
 
-## How JWT Tokens Work
+## JWT Tokens
 
-After login, the server creates a **token** — a small string that proves the user is authenticated.
+> **Key Concept: JWT (JSON Web Token)**
+> A JWT is a string that contains encoded information (like user ID and role) and a cryptographic signature. The server creates it at login, the client stores it, and the client sends it with every subsequent request. The server verifies the signature to confirm the token hasn't been tampered with.
 
-> [!NOTE]
-> **Technical**: A JSON Web Token (JWT) is a compact, URL-safe token format that encodes claims (data) as a JSON payload, signed with a secret key using HMAC or RSA. The server creates it, the client stores and sends it, and the server verifies it on each request without needing a database lookup.
-
-> [!NOTE]
-> **Plain English**: A JWT is like a stamped wristband at a concert. The security guard (server) stamps it when you enter (login). Every time you want to access a restricted area (protected route), you show the wristband. The guard can verify it's real by checking the stamp — without looking you up in a list. If someone tries to forge the stamp, it won't match.
-
-### Anatomy of a JWT
+### JWT Anatomy
 
 ```
 eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjEsInJvbGUiOiJ1c2VyIn0.abc123signature
-│                     │ │                                      │ │              │
-└─────────────────────┘ └──────────────────────────────────────┘ └──────────────┘
-       HEADER                        PAYLOAD                       SIGNATURE
-   (algorithm used)            (data about the user)          (proves it's genuine)
 
-HEADER:  { "alg": "HS256" }
-PAYLOAD: { "userId": 1, "role": "user" }
-SIGNATURE: HMAC-SHA256(header + payload, JWT_SECRET)
+      HEADER              PAYLOAD                      SIGNATURE
+  (algorithm)        (user data)                  (cryptographic proof)
+  {"alg":"HS256"}    {"userId":1,"role":"user"}    HMAC(header+payload, SECRET)
 ```
 
-**The signature is the key.** It's created using a secret that only the server knows (`JWT_SECRET`). Anyone can read the header and payload (they're just Base64-encoded), but nobody can create a valid signature without the secret. If someone modifies the payload (e.g., changes `userId` from 1 to 2), the signature won't match and the server rejects it.
+The three parts are separated by dots and are base64-encoded (not encrypted — anyone can decode them). The security comes from the **signature**: if anyone changes the payload (e.g., changing `userId` from 1 to 2), the signature won't match, and the server rejects the token.
 
 ### Token Lifecycle
 
 ```
-1. User logs in → Server creates JWT with user data + signs it
-2. Server sends JWT to client
-3. Client stores JWT in localStorage
-4. Client sends JWT on every request: Authorization: Bearer <token>
-5. Server middleware verifies signature on every request
-6. If valid → request proceeds with user context
-7. If invalid/expired → 401 Unauthorized
+1. User registers or logs in
+2. Server validates credentials
+3. Server creates JWT: jwt.sign({ userId, role }, JWT_SECRET)
+4. Server sends JWT to client
+5. Client stores JWT in localStorage
+6. Client includes JWT in every request: Authorization: Bearer <token>
+7. Server's auth middleware: jwt.verify(token, JWT_SECRET)
+8. If valid → extract userId and role → continue to route handler
+9. If invalid/expired → return 401 Unauthorized
 ```
 
 ---
 
-## What VaultNote Does
+## 🧠 Spatial Check-In
 
-**Public pages** (no login required):
-- Register page — create an account
-- Login page — sign in to an existing account
+1. What's the difference between authentication and authorization? Give an example of each.
 
-**Protected pages** (login required):
-- Notes list — see all YOUR notes
-- Note editor — create, edit, delete a note
+2. Why can't we just store passwords as plain text in the database?
 
-**Admin features** (admin role required):
-- Admin stats — view how many users and notes exist
+3. A JWT contains the user's role (`"admin"` or `"user"`). Could a user decode their token, change `"user"` to `"admin"`, and gain admin access?
 
-**Key security rules:**
-- Users can only see their own notes
-- Users can only edit/delete their own notes
-- Passwords are hashed with bcrypt
-- Every protected request requires a valid JWT
-- JWT_SECRET is never in code — only in environment variables
+4. Why do we use bcrypt instead of SHA-256 for password hashing?
 
----
+<details>
+<summary>Check Your Answers</summary>
 
-## API Overview
+1. **Authentication** = proving identity ("Are you who you claim to be?" — verified by password). **Authorization** = checking permissions ("Are you allowed to do this?" — verified by role or ownership). Example: Logging in is authentication. Checking if you can delete a note is authorization.
 
-| Method | Endpoint | Auth? | Purpose |
-|--------|----------|-------|---------|
-| POST | `/api/auth/register` | No | Create account |
-| POST | `/api/auth/login` | No | Get JWT token |
-| GET | `/api/auth/me` | Yes | Get current user info |
-| GET | `/api/notes` | Yes | List user's notes |
-| POST | `/api/notes` | Yes | Create a note |
-| GET | `/api/notes/:id` | Yes | Get one note (must be owner) |
-| PUT | `/api/notes/:id` | Yes | Update note (must be owner) |
-| DELETE | `/api/notes/:id` | Yes | Delete note (must be owner) |
-| GET | `/api/admin/stats` | Admin | Usage statistics |
-| GET | `/api/health` | No | Health check |
+2. **Database breaches happen.** If passwords are stored in plain text and the database is compromised, every user's password is exposed. With bcrypt hashing, the attacker gets useless hashes that can't be reversed back to passwords.
 
-Notice the pattern: auth routes are public, everything else is protected.
+3. **No.** They can decode and modify the payload (it's just base64), but they can't recreate the signature without the `JWT_SECRET`, which only lives on the server. When the server verifies the modified token, the signature check fails, and the request is rejected with 401.
 
----
-
-> [!TIP]
-> ## Spatial Check-In
-> Make sure you understand these concepts before building. They'll come up in every interview about web security.
-
-1. **What is the difference between authentication and authorization?**
-
-<details><summary>Answer</summary>
-
-Authentication verifies who you are (login). Authorization determines what you're allowed to do (permissions).
-
-</details>
-
-2. **Why do we hash passwords instead of storing them in plain text?**
-
-<details><summary>Answer</summary>
-
-If the database is breached, hashed passwords can't be reversed to plain text. Plain text passwords would be immediately usable by attackers.
-
-</details>
-
-3. **What is a trust boundary?**
-
-<details><summary>Answer</summary>
-
-The line between what you control (backend/database) and what you don't (browser/frontend). Never trust anything from the untrusted side without validation.
-
-</details>
-
-4. **How does a JWT prove a user is authenticated?**
-
-<details><summary>Answer</summary>
-
-The JWT contains user data (payload) and a cryptographic signature created with a secret only the server knows. The server verifies the signature on each request — if it matches, the token is genuine and the user is who they claim to be.
-
-</details>
-
-5. **Why can't someone forge a JWT by changing the userId in the payload?**
-
-<details><summary>Answer</summary>
-
-The signature is computed from the payload + a secret key. Changing the payload invalidates the signature. Without the secret key, they can't create a new valid signature.
-
-</details>
-
-6. **Why is JWT_SECRET stored in environment variables, not in code?**
-
-<details><summary>Answer</summary>
-
-Code is pushed to GitHub and visible to anyone. If the secret is in code, anyone can forge valid tokens. Environment variables stay on the server and never enter version control.
+4. **bcrypt is intentionally slow.** SHA-256 can compute billions of hashes per second, making brute-force attacks trivial. bcrypt's configurable cost factor limits attempts to ~100/second, making brute-force impractical.
 
 </details>
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| | [Level 3 Overview](../) | [02 — Project Setup →](../02-project-setup/) |
+> **Session Break** — Security foundations understood.
+> When you return, you'll scaffold the project in [Step 2 — Project Setup](../02-project-setup/).
+
+---
+
+| | |
+|:---|---:|
+| [← Level 3 Overview](../) | [Step 2 — Project Setup →](../02-project-setup/) |

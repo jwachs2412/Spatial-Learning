@@ -39,6 +39,8 @@ You will build **5 real, production-ready applications**, each more complex than
 3. Work through each level sequentially — they build on each other
 4. **Do not skip levels.** Each one introduces concepts the next level assumes you know.
 5. At each level, build the app yourself. Reading is not learning. Building is learning.
+6. **Try before you look.** Each lesson gives you a challenge before revealing the solution. Attempt it first — even if you fail, the struggle makes the solution stick.
+7. **Read the "Why" sections.** Understanding *why* code exists matters more than knowing *what* it does. You can always look up syntax; you can't Google architectural reasoning.
 
 ## Folder Structure
 
@@ -67,6 +69,16 @@ You will build **5 real, production-ready applications**, each more complex than
 - Vitest + React Testing Library (Level 4) — automated testing
 - GitHub Actions (Level 5) — CI/CD pipelines
 - Sentry (Level 5) — error monitoring
+
+## Deployment Platforms
+
+Each project is deployed to production. We use multiple providers so all 5 projects can stay live simultaneously:
+
+- **Frontend**: Vercel (unlimited free projects)
+- **Backend**: Render, Railway, or Fly.io
+- **Database**: Supabase, Neon, or Render PostgreSQL (see the [Curriculum Overview](./00-curriculum-overview/) for a strategy to spread across providers)
+
+> **Note**: Render only allows 1 free PostgreSQL database per account. The curriculum provides setup instructions for multiple database providers so you aren't blocked.
 
 ## Growth Tracking
 

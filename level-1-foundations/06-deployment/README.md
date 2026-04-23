@@ -1,387 +1,306 @@
-`Level 1` **Step 6 of 7** — Deployment
-
-# 06 — Deployment: Shipping to the Internet
+# Step 6 — Deployment: Shipping to the Internet
 
 ## Spatial Orientation
 
-Until now, your app runs on `localhost` — your own computer. Nobody else can see it. Deployment means putting it on computers that are connected to the internet 24/7, so anyone with the URL can access it.
-
 ```
-BEFORE DEPLOYMENT (localhost)               AFTER DEPLOYMENT (internet)
-──────────────────────────────              ───────────────────────────────
-
-Your Computer                               The Internet
-┌─────────────────────┐                    ┌──────────────────────────────┐
-│ localhost:5173       │                    │  your-app.vercel.app         │
-│ localhost:3001       │                    │  your-api.onrender.com       │
-│                     │                    │                              │
-│ Only YOU can access  │                    │ ANYONE can access            │
-│ Dies when you close  │                    │ Runs 24/7                    │
-│ the terminal         │                    │ Auto-deploys from GitHub     │
-└─────────────────────┘                    └──────────────────────────────┘
+DEVELOPMENT (your computer)              PRODUCTION (the internet)
+┌───────────┐  ┌───────────┐            ┌───────────┐  ┌───────────┐
+│ Frontend  │  │ Backend   │            │ Frontend  │  │ Backend   │
+│ :5173     │  │ :3001     │    ───▶    │ Vercel    │  │ Render    │
+│ npm run   │  │ npm run   │            │ (CDN)     │  │ Railway   │
+│ dev       │  │ dev       │            │           │  │ or Fly.io │
+└───────────┘  └───────────┘            └───────────┘  └───────────┘
+    localhost       localhost                yourapp.       yourapi.
+                                          vercel.app     onrender.com
 ```
+
+Moving from development to production changes three things:
+1. **Where the code runs** — Your machine → cloud servers
+2. **How users access it** — `localhost` → real URLs
+3. **How frontend finds backend** — Hardcoded port → environment variable
 
 ---
 
-## What "Build" Means
+## What Changes Between Development and Production
 
-Before deploying, we need to **build** the app. Here's what that means for each part:
+| Aspect | Development | Production |
+|--------|------------|------------|
+| Frontend URL | `http://localhost:5173` | `https://yourapp.vercel.app` |
+| Backend URL | `http://localhost:3001` | `https://yourapi.onrender.com` |
+| How frontend starts | `npm run dev` (Vite dev server) | Static files served by CDN |
+| How backend starts | `npm run dev` (ts-node + nodemon) | `npm run build` then `npm start` |
+| Backend code | TypeScript (interpreted) | JavaScript (compiled by `tsc`) |
+| CORS origin | `http://localhost:5173` | `https://yourapp.vercel.app` |
 
-### Frontend Build
+> **Key Concept: Build Process**
+> In development, tools like Vite and ts-node interpret your code on-the-fly. In production, you *build* the code first: TypeScript gets compiled to JavaScript, React gets bundled into optimized files. The build output is what actually runs in production.
 
-```
-SOURCE CODE (what you write)              BUILD OUTPUT (what the browser gets)
-────────────────────────────              ─────────────────────────────────────
-src/                                      dist/
-├── App.tsx        (TypeScript)           ├── index.html
-├── App.css        (CSS)                  ├── assets/
-├── components/    (multiple files)       │   ├── index-a1b2c3d4.js  (1 file)
-│   ├── EntryForm.tsx                     │   └── index-e5f6g7h8.css (1 file)
-│   ├── EntryList.tsx
-│   └── MoodChart.tsx
-├── services/api.ts
-└── types/index.ts
-```
+---
 
-> [!NOTE]
-> **Technical**: The build process compiles TypeScript to JavaScript, bundles all modules into minimal files, minifies the code (removes whitespace, shortens variable names), tree-shakes unused code, and generates content-hashed filenames for cache optimization.
+## 1. Prepare the Backend for Production
 
-> [!NOTE]
-> **Plain English**: "Building" takes your many source files and squishes them into a few tiny, optimized files that load fast in a browser. The browser doesn't understand TypeScript or JSX — the build converts them to plain JavaScript. The result is a `dist/` folder containing static files (HTML, JS, CSS) that any web server can serve.
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
-
-```bash
-cd client
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/client/`
-
-```bash
-npm run build
-```
-
-This creates the `dist/` folder inside `client/`. That folder is what gets deployed.
-
-```bash
-cd ..
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/` (back to the project root)
-
-### Backend Build
-
-```
-SOURCE CODE                               BUILD OUTPUT
-──────────                                ────────────
-src/
-├── index.ts       (TypeScript)           dist/
-├── routes/                               ├── index.js      (JavaScript)
-│   └── entries.ts (TypeScript)           ├── routes/
-└── types/                                │   └── entries.js (JavaScript)
-    └── index.ts   (TypeScript)           └── types/
-                                              └── index.js   (JavaScript)
-```
-
-> [!NOTE]
-> **Plain English**: Node.js can't run TypeScript directly in production (it can in development via `ts-node`). The build compiles TypeScript to JavaScript. The output is plain `.js` files that Node.js runs natively.
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+Before deploying, verify the build works locally:
 
 ```bash
 cd server
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/server/`
-
-```bash
 npm run build
 ```
 
-This creates the `dist/` folder inside `server/`.
+This runs `tsc` and compiles your TypeScript to JavaScript in the `dist/` folder. If this fails, fix the TypeScript errors before deploying — the deployment platform will run the same command.
 
 ```bash
-cd ..
+npm start
 ```
 
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/` (back to the project root)
+This runs `node dist/index.js` — the compiled version. Verify `http://localhost:3001/api/health` works.
+
+### ✅ Checkpoint
+
+- [ ] `npm run build` succeeds without errors
+- [ ] `npm start` runs the server from compiled JavaScript
+- [ ] Health check works at `http://localhost:3001/api/health`
+
+Press `Ctrl+C` to stop the server.
 
 ---
 
-## Dev vs Production Environments
+## 2. Push to GitHub
 
-**Development** (your computer):
-- Code changes reload instantly (hot module replacement)
-- Errors show detailed stack traces
-- Debug tools are available
-- Uses `localhost` URLs
-- TypeScript runs via `ts-node` (no build step needed)
-
-**Production** (cloud server):
-- Code is built and optimized
-- Errors should be logged, not shown to users
-- Performance is prioritized
-- Uses public URLs (HTTPS)
-- JavaScript runs directly (compiled from TypeScript)
-
-### Environment Variables Differ
-
-```
-DEVELOPMENT (.env)                        PRODUCTION (set in hosting dashboard)
-──────────────────                        ─────────────────────────────────────
-PORT=3001                                 PORT=10000 (set by host automatically)
-CORS_ORIGIN=http://localhost:5173         CORS_ORIGIN=https://your-app.vercel.app
-NODE_ENV=development                      NODE_ENV=production
+```bash
+cd ..  # Back to project root
+git add .
+git commit -m "chore: prepare for deployment"
 ```
 
-The same code runs in both environments, but environment variables change its behavior.
+Create a GitHub repository and push:
+
+```bash
+# Using GitHub CLI (if installed)
+gh repo create dev-pulse --public --source=. --remote=origin --push
+
+# Or manually: create the repo on github.com, then:
+git remote add origin git@github.com:yourusername/dev-pulse.git
+git branch -M main
+git push -u origin main
+```
 
 ---
 
-## Deploying the Frontend (Vercel)
+## 3. Deploy the Backend
 
-### Why Vercel
+You have several options for backend hosting. Choose one:
 
-- **Vercel over Netlify**: Both are excellent for static frontends. Vercel has slightly better integration with modern React tooling and simpler configuration. Netlify is a strong alternative.
-- **Vercel over AWS S3**: S3 requires configuring CloudFront, SSL certificates, and DNS manually. Vercel does all of this automatically in seconds.
-- **Vercel over GitHub Pages**: GitHub Pages is for truly static sites. Vercel handles environment variables, redirects, and client-side routing out of the box.
+### Option A: Render (Simple, Popular)
 
-### Steps
+**Pros:** Easy setup, auto-deploys from GitHub, free tier available.
+**Cons:** Free tier has cold starts (first request after inactivity takes 30-60 seconds). Only 1 free PostgreSQL database per account (relevant for Level 2+).
 
-1. **Check if you already have a Vercel account**: Go to https://vercel.com and try to log in. If you can log in, skip to step 2. If not, sign up with your GitHub account.
+1. Go to [render.com](https://render.com) and sign up with GitHub
+2. Click **New** → **Web Service**
+3. Connect your GitHub repository
+4. Configure:
 
-2. **Import your repository**:
-   - Click "Add New" → "Project"
-   - Select your `dev-pulse` repository from GitHub
-   - Configure:
-     - **Framework Preset**: Vite
-     - **Root Directory**: `client`
-     - **Build Command**: `npm run build`
-     - **Output Directory**: `dist`
+| Setting | Value |
+|---------|-------|
+| **Name** | `dev-pulse-api` |
+| **Root Directory** | `server` |
+| **Runtime** | Node |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm start` |
 
-3. **Add environment variables**:
-   - Click "Environment Variables"
-   - Add: `VITE_API_URL` = `https://your-backend-url.onrender.com/api`
-   - (You'll get this URL after deploying the backend)
+5. Add environment variable:
+   - `CORS_ORIGIN` = (leave blank for now — you'll fill this after deploying the frontend)
 
-4. **Click Deploy**
+6. Click **Create Web Service**
+7. Wait for the build to complete (2-3 minutes)
+8. Test: `https://your-service-name.onrender.com/api/health`
 
-Vercel will:
-- Pull your code from GitHub
-- Run `npm install` in the `client/` folder
-- Run `npm run build`
-- Upload the `dist/` folder to their CDN (Content Delivery Network)
-- Give you a URL like `https://dev-pulse-abc123.vercel.app`
+### Option B: Railway (No Cold Starts)
 
-### What Is a CDN?
+**Pros:** No cold starts on paid plan, easy environment variables, PostgreSQL included.
+**Cons:** Free tier has limited hours per month ($5/month credit).
+
+1. Go to [railway.app](https://railway.app) and sign up with GitHub
+2. Click **New Project** → **Deploy from GitHub repo**
+3. Select your repository
+4. Railway auto-detects Node.js. Configure:
+
+| Setting | Value |
+|---------|-------|
+| **Root Directory** | `server` |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm start` |
+
+5. Add environment variable: `CORS_ORIGIN` = (fill after frontend deploy)
+6. Deploy and note your URL
+
+### Option C: Fly.io (Global Edge)
+
+**Pros:** Global deployment, generous free tier, fast cold starts.
+**Cons:** Requires CLI tool installation, slightly more complex setup.
+
+1. Install the Fly CLI: `brew install flyctl` (macOS) or see [fly.io/docs](https://fly.io/docs/getting-started/installing-flyctl/)
+2. Sign up: `fly auth signup`
+3. From `server/`, run: `fly launch`
+4. Follow the prompts to configure
+5. Set environment variables: `fly secrets set CORS_ORIGIN=https://yourapp.vercel.app`
+6. Deploy: `fly deploy`
+
+---
+
+## 4. Deploy the Frontend
+
+### Vercel (Recommended)
+
+1. Go to [vercel.com](https://vercel.com) and sign up with GitHub
+2. Click **Add New** → **Project**
+3. Import your repository
+4. Configure:
+
+| Setting | Value |
+|---------|-------|
+| **Framework Preset** | Vite |
+| **Root Directory** | `client` |
+| **Build Command** | `npm run build` |
+| **Output Directory** | `dist` |
+
+5. Add environment variable:
+   - `VITE_API_URL` = `https://your-backend-url.onrender.com/api`
+
+> ⚠️ **Important:** The URL must NOT have a trailing slash. Use `https://your-api.onrender.com/api` not `https://your-api.onrender.com/api/`.
+
+6. Click **Deploy**
+
+---
+
+## 5. Update CORS on the Backend
+
+Now that you have your frontend URL, go back to your backend hosting provider and set the `CORS_ORIGIN` environment variable:
 
 ```
-                          ┌──── CDN Node (Tokyo) ──────┐
-                          │  Copy of your dist/ files   │
-┌────────────┐           │  Serves users in Asia fast  │
-│ Your build │──deploy──▶ ├──── CDN Node (London) ─────┤
-│ (dist/)    │           │  Copy of your dist/ files   │
-└────────────┘           │  Serves users in Europe     │
-                          ├──── CDN Node (New York) ────┤
-                          │  Copy of your dist/ files   │
-                          │  Serves users in US East    │
-                          └────────────────────────────┘
+CORS_ORIGIN=https://dev-pulse.vercel.app
 ```
 
-> [!NOTE]
-> **Technical**: A CDN distributes your static files across servers worldwide. Users download from the nearest server, reducing latency.
+> ⚠️ **Common Mistake: Trailing Slash in CORS Origin**
+> This is the most common production deployment bug. The browser sends the origin **without** a trailing slash.
+>
+> Wrong: `https://dev-pulse.vercel.app/`
+> Right: `https://dev-pulse.vercel.app`
+>
+> If you see a CORS error in production where the error message says the origin value "is not equal to the supplied origin," check for a trailing slash.
 
-> [!NOTE]
-> **Plain English**: Instead of one server in one location, your files are copied to servers around the world. Someone in Tokyo gets the files from a nearby server instead of waiting for them to travel from the US.
-
----
-
-## Deploying the Backend (Render)
-
-### Why Render
-
-- **Render over Heroku**: Heroku's free tier was removed. Render offers a free tier that's sufficient for learning.
-- **Render over Railway**: Both are good. Render has more straightforward documentation and a simpler onboarding experience.
-- **Render over AWS EC2**: EC2 requires managing a virtual machine, installing Node, configuring security groups, setting up a reverse proxy... Render does all of this automatically.
-
-### Steps
-
-1. **Check if you already have a Render account**: Go to https://render.com and try to log in. If you can log in, skip to step 2. If not, sign up with your GitHub account.
-
-2. **Create a new Web Service**:
-   - Click "New" → "Web Service"
-   - Connect your GitHub repository
-   - Configure:
-     - **Name**: `dev-pulse-api`
-     - **Root Directory**: `server`
-     - **Runtime**: Node
-     - **Build Command**: `npm install && npm run build`
-     - **Start Command**: `npm start`
-
-3. **Add environment variables**:
-   - `PORT`: (Render sets this automatically)
-   - `CORS_ORIGIN`: `https://dev-pulse-abc123.vercel.app` (your Vercel URL)
-   - `NODE_ENV`: `production`
-
-4. **Click Create Web Service**
-
-Render will:
-- Pull your code from GitHub
-- Run `npm install` in the `server/` folder
-- Run `npm run build` (compiles TypeScript)
-- Run `npm start` (starts the Express server)
-- Give you a URL like `https://dev-pulse-api.onrender.com`
-
-### Update Vercel Environment Variable
-
-Now that you have the backend URL, go back to Vercel:
-- Settings → Environment Variables
-- Set `VITE_API_URL` to `https://dev-pulse-api.onrender.com/api`
-- Redeploy (Vercel dashboard → Deployments → Redeploy)
+After updating the environment variable, your backend will automatically redeploy (on Render) or you may need to trigger a redeploy.
 
 ---
 
-## CORS in Production
+## 6. Verify Production
 
-In development, CORS was:
-```typescript
-cors({ origin: 'http://localhost:5173' })
+Open your Vercel URL and test:
+
+1. **Submit a mood entry** — should succeed
+2. **Entries should appear** in the list
+3. **Open DevTools** → Network tab — check requests go to your backend URL
+4. **No CORS errors** in the console
+5. **Try on your phone** — open the Vercel URL on your phone's browser
+
+### Troubleshooting
+
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| CORS error | Trailing slash in origin, or CORS_ORIGIN not set | Remove trailing slash, verify env var on backend |
+| "Failed to fetch" | Backend not running or wrong URL | Check backend logs, verify VITE_API_URL |
+| Frontend shows blank page | Build error, or wrong root directory | Check Vercel build logs |
+| Backend returns 503 | Server crashed during startup | Check backend logs for TypeScript compilation errors |
+| `Cannot find module` on backend | Build failed, or start command wrong | Verify `npm run build` works locally, check start command |
+
+### 🧠 Debugging Exercise
+
+You deploy and see this error in the browser console:
+```
+Access to fetch at 'https://dev-pulse-api.onrender.com/api/entries' from origin 'https://dev-pulse.vercel.app' has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header has a value 'https://dev-pulse.vercel.app/' that is not equal to the supplied origin.
 ```
 
-In production, it must be:
-```typescript
-cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' })
+What's the problem, and how do you fix it?
+
+<details>
+<summary>Answer</summary>
+
+The error message tells you exactly what's wrong: the CORS header value (`https://dev-pulse.vercel.app/`) has a trailing slash, but the browser sent the origin without one (`https://dev-pulse.vercel.app`). They don't match, so CORS blocks the request.
+
+Fix: Go to your backend hosting provider's environment variables and change `CORS_ORIGIN` from `https://dev-pulse.vercel.app/` to `https://dev-pulse.vercel.app` (remove the trailing slash). Redeploy.
+
+</details>
+
+---
+
+## 7. Understanding What Just Happened
+
+```
+PRODUCTION ARCHITECTURE
+
+User's Browser                    Cloud Services
+┌────────────────┐               ┌──────────────────┐
+│                │   HTTPS       │ Vercel CDN       │
+│  React App     │◀──────────────│                  │
+│  (JavaScript   │               │ Serves built     │
+│   + HTML + CSS)│               │ static files     │
+│                │               │ (index.html,     │
+│                │               │  bundle.js, etc) │
+│                │               └──────────────────┘
+│                │
+│                │   HTTPS       ┌──────────────────┐
+│  fetch() ──────│──────────────▶│ Render / Railway │
+│                │               │                  │
+│                │◀──────────────│ Express server   │
+│  JSON response │               │ (compiled JS)    │
+│                │               │                  │
+└────────────────┘               │ In-memory data   │
+                                 └──────────────────┘
 ```
 
-We already wrote it this way in Step 2 of the backend. The `CORS_ORIGIN` environment variable on Render overrides the default.
-
-**Why CORS matters in production**: Your frontend is at `your-app.vercel.app` and your backend is at `your-api.onrender.com`. These are different origins. Without CORS, the browser blocks every request from the frontend to the backend.
-
----
-
-## Production Debugging
-
-### What If Something Doesn't Work?
-
-**Frontend not loading:**
-- Check Vercel deployment logs (Dashboard → Deployments → click latest → Logs)
-- Did the build succeed? Look for errors in the build log
-- Is the environment variable set correctly?
-
-**Backend not responding:**
-- Check Render logs (Dashboard → your service → Logs)
-- Is the server starting? Look for `Server running on...`
-- Is the PORT being read from the environment variable?
-
-**Frontend loads but can't reach backend:**
-- Open browser DevTools → Network tab
-- Look for failed requests (red)
-- Check: Is the VITE_API_URL pointing to the correct Render URL?
-- Check: Is CORS_ORIGIN on Render set to your Vercel URL?
-- Check: Did you include `/api` in VITE_API_URL?
-
-### Common Production Issues
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| 502 Bad Gateway | Backend crashed | Check Render logs for errors |
-| CORS error | Origin mismatch | Verify CORS_ORIGIN matches frontend URL exactly |
-| API returns 404 | Wrong URL | Check that VITE_API_URL includes `/api` |
-| Frontend blank | Build failed | Check Vercel build logs |
-| Data missing after deploy | In-memory data resets on deploy | Expected — Level 2 adds a database |
+Key differences from development:
+- **HTTPS** instead of HTTP (the hosting platforms handle SSL certificates)
+- **CDN** serves the frontend (fast, globally distributed)
+- **Compiled JavaScript** runs on the backend (not TypeScript directly)
+- **Environment variables** configure the connection between services
 
 ---
 
-## Making It Publicly Accessible
-
-After deployment:
-
-1. **Your frontend URL**: `https://dev-pulse-abc123.vercel.app`
-   - This is publicly accessible. Share it with anyone.
-
-2. **Your backend URL**: `https://dev-pulse-api.onrender.com`
-   - This is publicly accessible. The `/api/health` endpoint shows it's running.
-
-3. **Your GitHub repository**: `https://github.com/yourusername/dev-pulse`
-   - This is where employers look at your code.
-
-Update your README with the live URLs.
-
----
-
-## Commit and Push
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+## 8. Commit
 
 ```bash
 git add .
-git commit -m "docs: add deployment configuration and update README with live URLs"
-git push
+git commit -m "feat: deploy DevPulse to Vercel and Render"
 ```
 
 ---
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                    DEPLOYED ARCHITECTURE                              │
-│                                                                      │
-│   User's Browser                                                     │
-│   ┌──────────────────────┐                                          │
-│   │  Types URL:           │                                          │
-│   │  your-app.vercel.app  │                                          │
-│   └──────────┬───────────┘                                          │
-│              │                                                       │
-│              │ HTTPS                                                  │
-│              ▼                                                       │
-│   ┌──────────────────────┐     Serves static files (HTML, JS, CSS)  │
-│   │     Vercel CDN       │     from dist/ folder                     │
-│   │  (Frontend Host)     │     No server code runs here              │
-│   └──────────────────────┘                                          │
-│              │                                                       │
-│              │ The JS in the browser makes fetch() calls to:         │
-│              │ your-api.onrender.com/api/entries                     │
-│              │                                                       │
-│              │ HTTPS                                                  │
-│              ▼                                                       │
-│   ┌──────────────────────┐     Runs Node.js + Express               │
-│   │    Render Server     │     Processes API requests                │
-│   │  (Backend Host)      │     Stores data in memory                 │
-│   └──────────────────────┘                                          │
-│                                                                      │
-│   Both auto-deploy when you push to GitHub.                          │
-└──────────────────────────────────────────────────────────────────────┘
-```
+## 🧠 Spatial Check-In
 
----
+1. Why does the backend need a `build` step (`tsc`) in production but not in development?
 
-> [!TIP]
-> ## Spatial Check-In
+2. If you update your backend code and push to GitHub, what happens on Render? What about on Vercel for frontend changes?
 
-1. **Why is the frontend deployed to Vercel and the backend to Render instead of putting both on one service?**
+3. Your app works locally but fails in production. The backend logs show no errors, but the frontend console shows "Failed to fetch." What's the most likely cause?
 
-<details><summary>Answer</summary>
+<details>
+<summary>Check Your Answers</summary>
 
-The frontend is static files (HTML, CSS, JS) that need a CDN for fast delivery. The backend is a running Node.js process that needs a server. Different hosting needs require different services.
+1. **In development**, `ts-node` interprets TypeScript on-the-fly — convenient but slow and not suitable for production. **In production**, `tsc` compiles TypeScript to JavaScript once, and Node.js runs the compiled JavaScript directly — faster and more reliable.
 
-</details>
+2. **Both auto-deploy.** Render watches your GitHub repo and rebuilds when you push. Vercel does the same. This is called continuous deployment.
 
-2. **What does CORS_ORIGIN do in the backend's production environment?**
-
-<details><summary>Answer</summary>
-
-It tells the backend which frontend URL is allowed to make requests. Without it, the browser blocks cross-origin requests from your Vercel frontend to your Render backend.
+3. **CORS misconfiguration or wrong API URL.** If the backend is running fine (no errors in its logs), the frontend is either sending requests to the wrong URL (`VITE_API_URL` not set or wrong) or the backend is rejecting the origin (`CORS_ORIGIN` not set, wrong, or has a trailing slash).
 
 </details>
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 05 — Connecting Frontend to Backend](../05-connecting/) | [Level 1 Overview](../) | [07 — Growth Review →](../07-growth/) |
+> **Session Break** — Your app is live on the internet!
+> When you return, you'll review your skills in [Step 7 — Growth Review](../07-growth/).
+
+---
+
+| | |
+|:---|---:|
+| [← Step 5: Connecting](../05-connecting/) | [Step 7 — Growth Review →](../07-growth/) |

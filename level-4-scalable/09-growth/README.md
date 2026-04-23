@@ -194,6 +194,9 @@ Before moving to Level 5, verify:
 - [ ] DataDash is deployed and accessible at a public URL
 - [ ] GitHub repository is public with a clear README
 - [ ] All tests pass (frontend unit + component, backend API)
+- [ ] `server/package.json` has `@types/node`, `@types/express`, `@types/cors`, `@types/pg` in `dependencies` (not devDependencies)
+- [ ] `server/tsconfig.json` has `"types": ["node"]` in compilerOptions
+- [ ] No CORS errors (no trailing slash in CORS_ORIGIN)
 - [ ] You can explain Redux data flow (dispatch → reducer → store → selector)
 - [ ] You can explain createAsyncThunk lifecycle (pending → fulfilled/rejected)
 - [ ] You can explain the testing pyramid (unit → component → integration)

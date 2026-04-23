@@ -1,249 +1,169 @@
-`Level 1` **Step 2 of 7** — Project Setup
-
-# 02 — Project Setup: Creating the Skeleton
+# Step 2 — Project Setup: Creating the Skeleton
 
 ## Spatial Orientation
 
-We're about to create two separate projects inside one folder:
-
 ```
-dev-pulse/           ← The project root
-├── client/          ← Frontend project (React + TypeScript + Vite)
-└── server/          ← Backend project (Node + Express + TypeScript)
+dev-pulse/          ← YOU ARE CREATING THIS
+├── client/         ← Frontend (React + TypeScript)
+├── server/         ← Backend (Node + Express + TypeScript)
+├── .gitignore
+└── README.md
 ```
 
-These are **independent projects**, each with their own `package.json`, their own dependencies, and their own `node_modules`. They could live in separate repositories. We keep them together for convenience.
-
-**Where are we in the stack?** Nowhere yet — we're building the scaffolding that the code will live in.
+In this step, you create the project structure, install dependencies, and configure TypeScript. No application code yet — just the skeleton.
 
 ---
 
-## Step 1: Create the Project Folder
+## 1. Create the Project Root
 
-Open your terminal. You should be in the folder where you keep your projects (for example, `~/Desktop/Sites` or `~/projects`). If you're not sure where you are, run `pwd` — it shows your current directory.
+> **Key Concept: Project Root**
+> The project root is the top-level folder that contains everything. Both your frontend (`client/`) and backend (`server/`) live inside it. This monorepo structure keeps related code together.
+
+Open your terminal and navigate to wherever you keep projects:
 
 ```bash
-# You should be in your projects folder (e.g., ~/Desktop/Sites)
-# If you're not there, navigate to it first:
-# cd ~/Desktop/Sites
-
 mkdir dev-pulse
 cd dev-pulse
 ```
 
-You are now inside `dev-pulse/`. Every command from here forward is run from inside this folder unless we explicitly say otherwise.
-
-## Step 2: Initialize Git
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/`
-
-First, check if this folder is already a Git repository:
-
-```bash
-git status
-```
-
-If you see `fatal: not a git repository`, that's expected — we haven't initialized it yet. Run:
+### Initialize Git
 
 ```bash
 git init
 ```
 
-If you see something like `On branch main, nothing to commit`, Git is already initialized — skip to Step 3.
+### Create .gitignore
 
-This creates a hidden `.git` folder that tracks all changes. Nothing is tracked yet — we need to tell Git what to watch.
+> **Why this matters:** Without a `.gitignore`, you'll accidentally commit `node_modules/` (thousands of files) and `.env` files (secrets). Both are serious mistakes.
 
-## Step 3: Create the .gitignore
+### 🏗️ Your Turn
 
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/`
+Before looking at the solution, think about what files and folders should be ignored in a JavaScript/TypeScript project. List at least 4 categories.
 
-```bash
-touch .gitignore
-```
+<details>
+<summary>See the solution</summary>
 
-Open `.gitignore` and add:
+Create `.gitignore` in the project root:
 
 ```gitignore
-# Dependencies
+# Dependencies — thousands of downloaded files, recreated by npm install
 node_modules/
 
-# Environment variables
+# Environment variables — contain secrets (passwords, API keys)
 .env
 .env.local
 .env.production
 
-# Build output
+# Build output — generated from source code, not source code itself
 dist/
 build/
 
-# OS files
+# OS files — system junk that isn't part of your project
 .DS_Store
 Thumbs.db
 
+# IDE settings — personal editor preferences
+.vscode/settings.json
+.idea/
+
 # Logs
 *.log
+npm-debug.log*
+
+# Test coverage
+coverage/
 ```
 
-**Why now?** We create `.gitignore` before adding any code so that Git never tracks `node_modules/` or `.env` files. If Git tracks them even once, they're in history forever.
+</details>
 
 ---
 
-## Step 4: Create the Frontend with Vite
+## 2. Set Up the Frontend (React + TypeScript)
 
-### What Is Vite?
-
-> [!NOTE]
-> **Technical**: Vite is a build tool that provides a fast development server with Hot Module Replacement (HMR) and an optimized production build using Rollup.
-
-> [!NOTE]
-> **Plain English**: Vite is the engine that runs your React app during development. It instantly shows your changes in the browser when you save a file, and it packages your code into optimized files for production.
-
-### Why Vite (Not Create React App, Not Next.js)
-
-- **Vite over Create React App (CRA)**: CRA is effectively deprecated — the React team no longer recommends it. CRA uses Webpack, which is slower. Vite starts in milliseconds, CRA takes seconds.
-- **Vite over Next.js**: Next.js is a full framework with its own backend, routing, and opinions. We want a pure React frontend and a separate Express backend so you understand the boundary between them. Next.js blurs that boundary (intentionally — it's great, just not right for learning the fundamentals).
-
-### Create the Frontend
-
-First, confirm that Node.js and npm are ready to go:
-
-```bash
-node --version    # Should show v20.x.x
-npm --version     # Should show 10.x.x
-```
-
-If either command shows `command not found`, go back to the [Setup Guide](../../00-setup-guide/) and install Node.js first.
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+> **Key Concept: Vite**
+> Vite (French for "fast") is a build tool that creates React projects with TypeScript support built in. It replaces the older Create React App (CRA). Vite starts in milliseconds because it serves files directly to the browser during development instead of bundling everything first.
 
 ```bash
 npm create vite@latest client -- --template react-ts
 ```
 
 **What this command does:**
-- `npm create vite@latest` → Run the Vite project creation tool
-- `client` → Name the folder "client"
-- `--template react-ts` → Use the React + TypeScript template
 
-Now move into the newly created `client/` folder and install its dependencies:
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/`
+| Part | Meaning |
+|------|---------|
+| `npm create vite@latest` | Run Vite's project scaffolding tool |
+| `client` | Name the folder `client` |
+| `--` | Separator — everything after this is passed to Vite |
+| `--template react-ts` | Use the React + TypeScript template |
 
 ```bash
 cd client
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/client/`
-
-Check if dependencies are already installed (i.e., if a `node_modules` folder exists):
-
-```bash
-ls node_modules
-```
-
-If you see a list of folders, dependencies are already installed — skip to "Verify It Works." If you see `No such file or directory`, install them:
-
-```bash
 npm install
-```
-
-`npm install` reads `package.json` and downloads all listed dependencies into `node_modules/`.
-
-### Verify It Works
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/client/`
-
-```bash
-npm run dev
-```
-
-Open `http://localhost:5173` in your browser. You should see the Vite + React starter page.
-
-Press `Ctrl+C` to stop the dev server.
-
-Now go back to the project root:
-
-```bash
 cd ..
 ```
 
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/` (back to the project root)
+### ✅ Checkpoint
+
+```bash
+cd client && npm run dev
+```
+
+You should see output like `Local: http://localhost:5173/`. Open that URL — you should see the Vite + React starter page. Press `Ctrl+C` to stop the server, then `cd ..` to return to the project root.
 
 ---
 
-> [!TIP]
-> **Session Break** — You've scaffolded the frontend with Vite, React, and TypeScript. Save your work and take a break.
-> When you return, you'll set up the backend with Express and configure the dev tooling.
-
----
-
-## Step 5: Create the Backend
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+## 3. Set Up the Backend (Node + Express + TypeScript)
 
 ```bash
 mkdir -p server/src
 cd server
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/server/`
-
-### Initialize the Node.js Project
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/server/`
-
-```bash
 npm init -y
 ```
 
-This creates `package.json` — the manifest file that describes your project, its dependencies, and its scripts.
-
 ### Install Dependencies
 
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/server/`
-
-Check if dependencies are already installed:
+> **Key Concept: Dependencies vs DevDependencies**
+> **Dependencies** are packages your app needs to run (Express, cors). **DevDependencies** are packages you only need during development (TypeScript compiler, nodemon). The difference matters during deployment.
 
 ```bash
-ls node_modules
-```
-
-If you see `No such file or directory` or the folder is empty, install them. If you already see folders listed, these packages may already be installed — but running the install command again is harmless (npm will skip what's already there):
-
-```bash
+# Runtime dependencies — needed to run the server
 npm install express cors
-npm install -D typescript @types/express @types/cors @types/node ts-node nodemon
+
+# TypeScript and development tools
+npm install typescript ts-node nodemon
 ```
 
-**What we just installed and why:**
+### Install Type Definitions
 
-| Package | Type | What It Does | Why We Need It |
-|---------|------|-------------|----------------|
-| `express` | Production | Web server framework | Handles HTTP requests and routing |
-| `cors` | Production | CORS middleware | Allows our frontend to talk to our backend |
-| `typescript` | Dev | TypeScript compiler | Compiles .ts files to .js files |
-| `@types/express` | Dev | Type definitions for Express | TypeScript needs to know Express's types |
-| `@types/cors` | Dev | Type definitions for cors | TypeScript needs to know cors's types |
-| `@types/node` | Dev | Type definitions for Node.js | TypeScript needs to know Node's types |
-| `ts-node` | Dev | Run TypeScript directly | No need to compile before running in dev |
-| `nodemon` | Dev | Auto-restart server on changes | Saves you from manually restarting |
+> **Why not --save-dev for @types?**
+> When you deploy to platforms like Render, Railway, or Fly.io, they run `npm install --production` by default, which skips `devDependencies`. But your build step (`npm run build` = `tsc`) still needs type definitions to compile TypeScript. If @types packages are in `devDependencies`, the build fails with: `Could not find a declaration file for module 'express'`.
+>
+> This is the **#1 most common deployment failure** in this curriculum. Always install @types as regular dependencies.
 
-**Production vs Dev dependencies:**
-- `dependencies` (no `-D`): Needed when the app runs in production
-- `devDependencies` (`-D`): Only needed during development (won't be in production)
+```bash
+npm install @types/node @types/express @types/cors
+```
+
+**NOT** `npm install --save-dev @types/...` — that puts them in devDependencies, which breaks production builds.
 
 ### Configure TypeScript
+
+> **Key Concept: tsconfig.json**
+> This file tells the TypeScript compiler how to compile your code. Every option has a purpose. Don't just copy it — understand what each setting does.
+
+### 🏗️ Your Turn
+
+Create `server/tsconfig.json`. You know it needs to:
+- Compile modern JavaScript (ES2020)
+- Output to a `dist/` folder
+- Read source from `src/`
+- Be strict about types
+- Know about Node.js built-in types (like `process`, `console`, `setTimeout`)
+
+Try writing it yourself, then check the solution.
+
+<details>
+<summary>See the solution</summary>
 
 Create `server/tsconfig.json`:
 
@@ -262,28 +182,41 @@ Create `server/tsconfig.json`:
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
 ```
 
-**What the important settings mean:**
+</details>
 
-| Setting | What It Does | Plain English |
-|---------|-------------|---------------|
-| `target: "ES2020"` | Output modern JavaScript | Our server runs Node 20, which supports modern JS |
-| `module: "commonjs"` | Use Node's module system | Node uses `require()`, not `import` (by default) |
-| `outDir: "./dist"` | Put compiled files in dist/ | Keeps compiled JS separate from source TS |
-| `rootDir: "./src"` | Source files live in src/ | Tells TypeScript where to look |
-| `strict: true` | Enable all strict checks | Catches more bugs. This is the whole point of TS. |
-| `esModuleInterop: true` | Better import compatibility | Lets you write `import express from 'express'` |
-| `sourceMap: true` | Generate source maps | Maps compiled JS back to TS for debugging |
+**Line-by-line breakdown:**
 
-### Configure Scripts
+| Setting | What It Does | Why It Matters |
+|---------|-------------|----------------|
+| `"target": "ES2020"` | Compile to ES2020 JavaScript | Modern enough for Node.js 20+, no unnecessary transpilation |
+| `"module": "commonjs"` | Use `require()`/`module.exports` style | Node.js standard module system |
+| `"lib": ["ES2020"]` | Include ES2020 standard library types | Gives you `Promise`, `Map`, `Set`, etc. |
+| `"outDir": "./dist"` | Put compiled JS in `dist/` folder | Keeps compiled output separate from source |
+| `"rootDir": "./src"` | Source code lives in `src/` | Tells compiler where to find your TypeScript |
+| `"strict": true` | Enable all strict type checks | Catches bugs at compile time, not runtime |
+| `"esModuleInterop": true` | Allow `import x from 'y'` syntax | Makes imports work consistently |
+| `"skipLibCheck": true` | Don't type-check `node_modules` | Faster compilation |
+| `"types": ["node"]` | Include Node.js type definitions | **Critical:** Without this, `process`, `console`, and `setTimeout` cause errors |
+| `"sourceMap": true` | Generate `.map` files | Maps compiled JS back to TypeScript for debugging |
 
-Update `server/package.json` — add a `scripts` section:
+> ⚠️ **Common Mistake: Missing `"types": ["node"]`**
+> Without this setting, TypeScript doesn't know about Node.js globals like `process.env`, `console.log`, or `setTimeout`. You'll see errors like:
+> - `Cannot find name 'process'`
+> - `Cannot find name 'console'`
+>
+> Always include `"types": ["node"]` in backend TypeScript projects.
+
+### Add Scripts to package.json
+
+Open `server/package.json` and replace the `"scripts"` section:
 
 ```json
 {
@@ -295,149 +228,72 @@ Update `server/package.json` — add a `scripts` section:
 }
 ```
 
-**What each script does:**
+| Script | What It Does | When You Use It |
+|--------|-------------|-----------------|
+| `dev` | Runs your server with auto-restart on file changes | During development |
+| `build` | Compiles TypeScript to JavaScript | Before deployment |
+| `start` | Runs the compiled JavaScript | In production |
 
-| Script | Command | What It Does |
-|--------|---------|-------------|
-| `npm run dev` | `nodemon --exec ts-node src/index.ts` | Runs the server, auto-restarts on file changes |
-| `npm run build` | `tsc` | Compiles TypeScript to JavaScript (for production) |
-| `npm start` | `node dist/index.js` | Runs the compiled JavaScript (in production) |
+### Verify your package.json dependencies
 
-Now go back to the project root:
-
-```bash
-cd ..
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/` (back to the project root)
-
----
-
-## Step 6: ESLint and Prettier Configuration
-
-### Frontend (Vite already includes basic ESLint)
-
-The Vite React template includes ESLint. Let's add Prettier.
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
-
-```bash
-cd client
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/client/`
-
-Check if Prettier is already installed in this project:
-
-```bash
-npx prettier --version
-```
-
-If you see a version number, it's already installed — skip to creating the `.prettierrc` file below. If you see a prompt to install or `command not found`, install it:
-
-```bash
-npm install -D prettier eslint-config-prettier
-```
-
-Create `client/.prettierrc`:
+Your `server/package.json` should have these packages under `"dependencies"` (NOT `"devDependencies"`):
 
 ```json
 {
-  "semi": true,
-  "trailingComma": "es5",
-  "singleQuote": true,
-  "printWidth": 80,
-  "tabWidth": 2
+  "dependencies": {
+    "@types/cors": "^2.x.x",
+    "@types/express": "^5.x.x",
+    "@types/node": "^22.x.x",
+    "cors": "^2.x.x",
+    "express": "^5.x.x",
+    "nodemon": "^3.x.x",
+    "ts-node": "^10.x.x",
+    "typescript": "^5.x.x"
+  }
 }
 ```
 
-**What each rule does:**
+> ⚠️ **Common Mistake: @types in devDependencies**
+> If you accidentally used `--save-dev` for @types packages, move them:
+> ```bash
+> npm uninstall @types/node @types/express @types/cors
+> npm install @types/node @types/express @types/cors
+> ```
+> This removes them from devDependencies and adds them to dependencies.
 
-| Rule | Value | What It Means |
-|------|-------|---------------|
-| `semi` | true | Add semicolons at the end of statements |
-| `trailingComma` | "es5" | Add trailing commas where ES5 allows (arrays, objects) |
-| `singleQuote` | true | Use 'single quotes' not "double quotes" for strings |
-| `printWidth` | 80 | Wrap lines longer than 80 characters |
-| `tabWidth` | 2 | Use 2 spaces for indentation |
-
-Now go back to the project root:
+Return to the project root:
 
 ```bash
 cd ..
 ```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/` (back to the project root)
-
-### Backend
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
-
-```bash
-cd server
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/server/`
-
-Check if Prettier is already installed in this project:
-
-```bash
-npx prettier --version
-```
-
-If you see a version number, skip to creating the `.prettierrc` file below. Otherwise, install it:
-
-```bash
-npm install -D prettier
-```
-
-Create `server/.prettierrc` (same config):
-
-```json
-{
-  "semi": true,
-  "trailingComma": "es5",
-  "singleQuote": true,
-  "printWidth": 80,
-  "tabWidth": 2
-}
-```
-
-```bash
-cd ..
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/` (back to the project root)
 
 ---
 
-## Step 7: Create the README
+## 4. Create the README
 
-Create `dev-pulse/README.md`:
+### 🏗️ Your Turn
+
+Write a README.md for DevPulse in the project root. Include:
+- Project name and description
+- Tech stack
+- How to install and run locally
+- API endpoints
+
+<details>
+<summary>See a template</summary>
+
+Create `README.md` in the project root:
 
 ```markdown
 # DevPulse — Developer Mood Tracker
 
-A simple web application for developers to track their daily mood, energy level, and reflections.
-
-## Features
-
-- Log daily mood entries with mood, energy level (1-5), and notes
-- View history of all mood entries
-- Simple mood visualization
+Track your daily mood, energy, and notes as a developer. Built with React, TypeScript, and Express.
 
 ## Tech Stack
 
 - **Frontend**: React, TypeScript, Vite
 - **Backend**: Node.js, Express, TypeScript
-- **Data**: In-memory storage
+- **Deployment**: Vercel (frontend), Render (backend)
 
 ## Getting Started
 
@@ -449,7 +305,7 @@ A simple web application for developers to track their daily mood, energy level,
 ### Installation
 
 ```bash
-# Clone the repository
+# Clone the repo
 git clone https://github.com/yourusername/dev-pulse.git
 cd dev-pulse
 
@@ -465,87 +321,112 @@ npm install
 ### Running Locally
 
 ```bash
-# Terminal 1 — Start the backend (from the dev-pulse/ root)
-cd server
+# Terminal 1 — Backend (from dev-pulse/server)
 npm run dev
 
-# Terminal 2 — Start the frontend (from the dev-pulse/ root)
-cd client
+# Terminal 2 — Frontend (from dev-pulse/client)
 npm run dev
 ```
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | /api/entries | Get all mood entries |
-| POST | /api/entries | Create a new mood entry |
-
-## What I Learned
-
-This project demonstrates understanding of:
-- Client-server architecture
-- React component design with TypeScript
-- REST API design with Express
-- Frontend-backend communication
-- Deployment fundamentals
+| POST | /api/entries | Create a new entry |
+| GET | /api/health | Health check |
 ```
+
+</details>
 
 ---
 
-## Step 8: First Commit
+## 5. ESLint and Prettier
 
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+These are already included in the Vite template for the frontend. For the backend, we'll keep it simple with just TypeScript's built-in checking for now.
+
+Prettier configuration — create `.prettierrc` in the project root:
+
+```json
+{
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "all"
+}
+```
+
+| Setting | What It Does |
+|---------|-------------|
+| `"semi": true` | Always use semicolons |
+| `"singleQuote": true` | Use `'` instead of `"` in JavaScript/TypeScript (JSON always uses `"`) |
+| `"tabWidth": 2` | 2-space indentation (industry standard for JS/TS) |
+| `"trailingComma": "all"` | Add commas after the last item in lists (makes diffs cleaner) |
+
+---
+
+## 6. First Commit
 
 ```bash
 git add .
-git commit -m "feat: initialize project structure with client and server"
+git commit -m "feat: scaffold dev-pulse project with client and server"
 ```
 
-**Spatial check**: At this point, you have:
-- An empty but configured frontend (React + TypeScript + Vite)
-- An empty but configured backend (Node + Express + TypeScript)
-- Git tracking your project
-- A README explaining the project
-- A .gitignore protecting secrets and junk files
+### ✅ Checkpoint
 
-No code logic yet. That comes next.
-
----
-
-## Project Structure So Far
+Your project should look like this:
 
 ```
 dev-pulse/
-├── .git/                    ← Git's internal tracking (don't touch)
-├── .gitignore               ← Files Git ignores
-├── README.md                ← Project documentation
-├── client/                  ← Frontend
-│   ├── node_modules/        ← Downloaded packages (gitignored)
-│   ├── public/              ← Static assets
-│   ├── src/                 ← Your React code goes here
-│   │   ├── App.tsx          ← Main component (will rewrite)
-│   │   ├── App.css          ← Styles (will rewrite)
-│   │   └── main.tsx         ← Entry point
-│   ├── index.html           ← The single HTML page
-│   ├── package.json         ← Frontend dependencies
-│   ├── tsconfig.json        ← TypeScript config
-│   ├── vite.config.ts       ← Vite config
-│   └── .prettierrc          ← Code formatting rules
-└── server/                  ← Backend
-    ├── node_modules/        ← Downloaded packages (gitignored)
-    ├── src/                 ← Your Express code goes here (empty)
-    ├── package.json         ← Backend dependencies
-    ├── tsconfig.json        ← TypeScript config
-    └── .prettierrc          ← Code formatting rules
+├── .gitignore
+├── .prettierrc
+├── README.md
+├── client/          ← Vite React app (runs with npm run dev)
+│   ├── src/
+│   ├── package.json
+│   └── ...
+└── server/          ← Express app (not running yet — no src/index.ts)
+    ├── src/         ← Empty, ready for Step 3
+    ├── package.json ← @types packages in dependencies
+    └── tsconfig.json ← includes "types": ["node"]
 ```
+
+Verify:
+1. `client/` has a working React dev server (`cd client && npm run dev`)
+2. `server/package.json` has `@types/node`, `@types/express`, `@types/cors` under `"dependencies"` (NOT `"devDependencies"`)
+3. `server/tsconfig.json` includes `"types": ["node"]`
+4. `.gitignore` excludes `node_modules/` and `.env`
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 01 — Spatial Orientation](../01-orientation/) | [Level 1 Overview](../) | [03 — Building the Backend →](../03-backend/) |
+### 🧠 Debugging Exercise
+
+What would happen if you forgot to create the `.gitignore` before running `git add .`?
+
+<details>
+<summary>Answer</summary>
+
+Git would stage the entire `node_modules/` folder — potentially 20,000+ files and 200MB+ of data. Your commit would be massive and your GitHub repo would be bloated. If you've already done this, you can fix it:
+
+```bash
+# Remove node_modules from Git's tracking (but not from disk)
+git rm -r --cached node_modules
+echo "node_modules/" >> .gitignore
+git add .gitignore
+git commit -m "fix: add .gitignore, remove node_modules from tracking"
+```
+
+This is why we always create `.gitignore` before the first `git add`.
+
+</details>
+
+---
+
+> **Session Break** — You've scaffolded the project.
+> When you return, you'll build the Express backend in [Step 3 — Backend](../03-backend/).
+
+---
+
+| | |
+|:---|---:|
+| [← Step 1: Orientation](../01-orientation/) | [Step 3 — Backend →](../03-backend/) |

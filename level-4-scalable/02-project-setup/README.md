@@ -122,17 +122,35 @@ npm install express cors dotenv pg pino pino-http express-rate-limit
 | `express-rate-limit` | Request rate limiting | **NEW** |
 
 ```bash
-npm install -D typescript @types/express @types/cors @types/pg tsx vitest supertest @types/supertest
+npm install typescript @types/node @types/express @types/cors @types/pg
 ```
+
+```bash
+npm install -D tsx vitest supertest @types/supertest pino-pretty
+```
+
+| Package | Purpose | New? |
+|---------|---------|------|
+| `typescript` | Type checking | Carried |
+| `@types/node` | Types for `process`, `console`, Node.js globals | Carried |
+| `@types/express` | Types for Express | Carried |
+| `@types/cors` | Types for cors | Carried |
+| `@types/pg` | Types for pg | Carried |
 
 | Dev Package | Purpose | New? |
 |-------------|---------|------|
-| `typescript` | Type checking | Carried |
-| `@types/*` | Type definitions | Carried |
 | `tsx` | Run TypeScript directly | Carried |
 | `vitest` | Test runner | **NEW** |
 | `supertest` | HTTP assertion library | **NEW** |
 | `@types/supertest` | Supertest types | **NEW** |
+| `pino-pretty` | Readable log formatting in development | **NEW** |
+
+> [!WARNING]
+> **`@types/node` and other `@types` packages MUST be regular dependencies (not `--save-dev` / `-D`).**
+>
+> **Why?** Deployment platforms like Render run `npm install --omit=dev` in production, which skips devDependencies. If `@types/node` is a devDependency, `tsc` can't find types for `process`, `console`, or `Buffer` — your build fails with `TS2580: Cannot find name 'process'` and `TS2584: Cannot find name 'console'`.
+>
+> **Rule:** Any `@types` package needed during `npm run build` must be in `dependencies`, not `devDependencies`.
 
 ### TypeScript Configuration
 
@@ -144,6 +162,7 @@ Create `server/tsconfig.json`:
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020"],
+    "types": ["node"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,

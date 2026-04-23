@@ -1,79 +1,46 @@
-`Level 2` **Step 3 of 7** — Database Design
-
-# 03 — Database Design: Schema, SQL, and Connections
+# Step 3 — Database Design: Schema, SQL, and Connections
 
 ## Spatial Orientation
 
 ```
 task-forge/
-├── client/          ← NOT working here right now
 └── server/
     └── src/
-        └── db/                ← ★ WE ARE HERE ★
-            ├── schema.sql     ← Table definitions (we'll build this)
-            └── index.ts       ← Database connection (we'll build this)
+        └── db/               ← YOU ARE HERE
+            ├── schema.sql      ← Table definitions
+            └── index.ts        ← Database connection
 ```
 
-**What layer are we in?** The DATA layer. We're designing the structure of our database and creating the connection from Express to PostgreSQL. This code never runs in the browser — it runs on the server and talks to the database.
+You're building the data layer — the foundation that everything else sits on. If the schema is wrong, everything above it struggles.
 
 ---
 
-## Step 1: Create the Folder Structure
+## 1. Design the Schema
 
-> [!IMPORTANT]
-> **You should be in:** `task-forge/`
+> **Key Concept: Schema**
+> A database schema is the blueprint of your tables — their columns, data types, constraints, and relationships. Think of it like the floor plan of a building: it defines what rooms exist (tables), how big they are (columns), and how they connect (relationships).
 
-```bash
-mkdir -p server/src/db
-mkdir -p server/src/routes
-mkdir -p server/src/middleware
-mkdir -p server/src/types
-```
+### 🏗️ Your Turn
 
----
+Before looking at the schema, design it yourself. TaskForge needs:
+- **Projects** with a name and description
+- **Tasks** that belong to a project, with a title and completed status
+- Auto-generated IDs, timestamps for both tables
 
-## Step 2: Design the Schema
+Questions to consider:
+- How do you link a task to its project?
+- What happens to tasks when a project is deleted?
+- Which columns should be required vs optional?
 
-A database schema defines the structure of your tables — what columns they have, what types those columns are, and how tables relate to each other.
+<details>
+<summary>See the solution</summary>
 
-TaskForge needs two tables:
-
-```
-┌─────────────────────────────┐       ┌─────────────────────────────────┐
-│         projects             │       │            tasks                 │
-├─────────────────────────────┤       ├─────────────────────────────────┤
-│ id          SERIAL PK       │───┐   │ id            SERIAL PK         │
-│ name        VARCHAR(100)    │   │   │ project_id    INTEGER FK ──────┤
-│ description TEXT             │   └──▶│               REFERENCES        │
-│ created_at  TIMESTAMP       │       │               projects(id)      │
-│ updated_at  TIMESTAMP       │       │               ON DELETE CASCADE  │
-│                             │       │ title         VARCHAR(200)      │
-│                             │       │ completed     BOOLEAN            │
-│                             │       │ created_at    TIMESTAMP          │
-│                             │       │ updated_at    TIMESTAMP          │
-└─────────────────────────────┘       └─────────────────────────────────┘
-       ONE project                         MANY tasks
-```
-
-**The relationship**: One project has many tasks. Each task belongs to exactly one project. This is called a **one-to-many** relationship — the most common relationship in database design.
-
-### Create the Schema File
-
-In VS Code, create a new file at `server/src/db/schema.sql`.
-
-Add this code to `server/src/db/schema.sql`:
+Create `server/src/db/schema.sql`:
 
 ```sql
 -- TaskForge Database Schema
--- Run with: psql taskforge < server/src/db/schema.sql
 
--- Drop existing tables (clean slate for development)
--- CASCADE ensures dependent objects are also dropped
-DROP TABLE IF EXISTS tasks CASCADE;
-DROP TABLE IF EXISTS projects CASCADE;
-
--- ─── PROJECTS TABLE ─────────────────────────────────────────────
-
+-- Projects table
 CREATE TABLE projects (
   id          SERIAL PRIMARY KEY,
   name        VARCHAR(100) NOT NULL,
@@ -82,8 +49,7 @@ CREATE TABLE projects (
   updated_at  TIMESTAMP DEFAULT NOW()
 );
 
--- ─── TASKS TABLE ────────────────────────────────────────────────
-
+-- Tasks table
 CREATE TABLE tasks (
   id          SERIAL PRIMARY KEY,
   project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -94,293 +60,144 @@ CREATE TABLE tasks (
 );
 ```
 
-### Line-by-Line Breakdown
+</details>
 
-**`DROP TABLE IF EXISTS tasks CASCADE;`**
-Deletes the `tasks` table if it already exists. This lets you re-run the schema file during development without errors. `CASCADE` means "also drop anything that depends on this table." We drop `tasks` first because it depends on `projects`.
+**Line-by-line breakdown:**
 
-**`CREATE TABLE projects (...)`**
-Creates a new table called `projects` with the columns defined inside the parentheses.
+| SQL | What It Does | Why |
+|-----|-------------|-----|
+| `SERIAL PRIMARY KEY` | Auto-incrementing integer, unique identifier | Every row needs a unique ID. SERIAL auto-generates it (1, 2, 3, ...) |
+| `VARCHAR(100) NOT NULL` | String up to 100 chars, cannot be empty | Enforces at the database level — even if the backend has a bug, the DB rejects invalid data |
+| `TEXT DEFAULT ''` | Unlimited length string, defaults to empty | Description is optional but always has a value |
+| `TIMESTAMP DEFAULT NOW()` | Auto-set to current time on creation | Automatic audit trail — you always know when a row was created |
+| `REFERENCES projects(id)` | Foreign key — links tasks to projects | Database enforces that `project_id` must be a real project ID |
+| `ON DELETE CASCADE` | When a project is deleted, its tasks are deleted too | Prevents orphan tasks (tasks pointing to a deleted project) |
 
-**`id SERIAL PRIMARY KEY`**
+> **Key Concept: Foreign Key**
+> A foreign key is a column that references the primary key of another table. It creates a relationship: "this task **belongs to** this project." The database enforces this — you can't create a task with `project_id = 999` if project 999 doesn't exist.
 
-> [!NOTE]
-> **Technical**: `SERIAL` is a PostgreSQL shorthand that creates an auto-incrementing integer column. `PRIMARY KEY` enforces uniqueness and creates an index for fast lookups.
+> **Key Concept: ON DELETE CASCADE**
+> CASCADE means "when the parent is deleted, automatically delete all children." Without it, deleting a project would fail because tasks still reference it (or worse, leave orphan tasks pointing to nothing).
 
-> [!NOTE]
-> **Plain English**: Every project gets a unique number (1, 2, 3, ...) assigned automatically. You never set the `id` yourself — the database picks the next available number. No two projects can have the same `id`.
+### 🧠 Think About It
 
-**`name VARCHAR(100) NOT NULL`**
+What would happen if you tried to insert a task with `project_id = 999` when no project with ID 999 exists?
 
-> [!NOTE]
-> **Technical**: `VARCHAR(100)` is a variable-length character string with a maximum of 100 characters. `NOT NULL` is a constraint that prevents this column from being empty.
+<details>
+<summary>Answer</summary>
 
-> [!NOTE]
-> **Plain English**: The project name is text, up to 100 characters. It's required — you can't create a project without a name.
+The database would reject the INSERT with a foreign key violation error: `Key (project_id)=(999) is not present in table "projects"`. This is the database enforcing data integrity — it's impossible to have a task pointing to a nonexistent project.
 
-**`description TEXT DEFAULT ''`**
+</details>
 
-> [!NOTE]
-> **Technical**: `TEXT` is an unlimited-length string type. `DEFAULT ''` sets an empty string as the default when no value is provided.
-
-> [!NOTE]
-> **Plain English**: The description can be as long as you want. If you don't provide one, it defaults to an empty string.
-
-**`created_at TIMESTAMP DEFAULT NOW()`**
-
-> [!NOTE]
-> **Technical**: `TIMESTAMP` stores date and time. `NOW()` is a PostgreSQL function that returns the current date and time. `DEFAULT NOW()` means the column is automatically set to the current time when a row is inserted.
-
-> [!NOTE]
-> **Plain English**: The database automatically records when each project was created. You don't need to set this yourself.
-
-**`project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE`**
-
-This is the most important line. Let's break it apart:
-
-| Part | What It Does |
-|------|-------------|
-| `project_id INTEGER` | A column that stores a number (the ID of a project) |
-| `NOT NULL` | Every task must belong to a project |
-| `REFERENCES projects(id)` | This number must match an existing project's `id` |
-| `ON DELETE CASCADE` | If the project is deleted, delete all its tasks too |
-
-> [!NOTE]
-> **Technical**: This is a foreign key constraint. It establishes a referential integrity relationship between the `tasks` and `projects` tables. `ON DELETE CASCADE` implements cascading deletion — removing a parent row automatically removes all child rows.
-
-> [!NOTE]
-> **Plain English**: This is the "tasks belong to projects" rule, enforced by the database. If you try to create a task for project 99 and project 99 doesn't exist, the database says "no." If you delete project 1, the database automatically deletes all of project 1's tasks. You don't have to write code for this — the database handles it.
-
-### CASCADE Visualized
-
-```
-BEFORE DELETE:                      AFTER: DELETE FROM projects WHERE id = 1
-
-projects table:                     projects table:
-┌────┬──────────┐                   ┌────┬──────────┐
-│ id │ name     │                   │ id │ name     │
-├────┼──────────┤                   ├────┼──────────┤
-│  1 │ Website  │  ← DELETED       │  2 │ API      │
-│  2 │ API      │                   └────┴──────────┘
-└────┴──────────┘
-                                    tasks table:
-tasks table:                        ┌────┬────────────┬──────────────┐
-┌────┬────────────┬──────────────┐  │ id │ project_id │ title        │
-│ id │ project_id │ title        │  ├────┼────────────┼──────────────┤
-├────┼────────────┼──────────────┤  │  3 │          2 │ Write docs   │
-│  1 │          1 │ Design page  │  └────┴────────────┴──────────────┘
-│  2 │          1 │ Build nav    │
-│  3 │          2 │ Write docs   │  Tasks 1 and 2 were automatically
-└────┴────────────┴──────────────┘  deleted because their project was deleted.
-```
-
-**`completed BOOLEAN DEFAULT false`**
-A true/false value. New tasks start as incomplete (`false`). When the user checks the checkbox, we change it to `true`.
-
----
-
-## Step 3: Run the Schema
-
-> [!IMPORTANT]
-> **You should be in:** `task-forge/`
+### Run the Schema
 
 ```bash
 psql taskforge < server/src/db/schema.sql
 ```
 
-You should see output like:
+Verify the tables were created:
 
-```
-DROP TABLE
-DROP TABLE
-CREATE TABLE
-CREATE TABLE
+```bash
+psql taskforge -c "\dt"
 ```
 
-### Verify the Tables Exist
+You should see `projects` and `tasks` in the list.
+
+---
+
+## 2. Practice SQL
+
+Before writing code, get comfortable with SQL by running queries manually:
 
 ```bash
 psql taskforge
 ```
 
-Inside psql:
+This opens an interactive SQL prompt. Try these:
 
 ```sql
--- List all tables
-\dt
-
--- Describe the projects table (shows columns and types)
-\d projects
-
--- Describe the tasks table
-\d tasks
-
--- Quit
-\q
-```
-
-You should see both tables with all their columns and constraints.
-
----
-
-> [!TIP]
-> **Session Break** — You've designed the schema with foreign keys and created both tables in PostgreSQL. Save your work and take a break.
-> When you return, you'll practice SQL queries hands-on and build the database connection pool.
-
----
-
-## Step 4: SQL Hands-On Tutorial
-
-Before writing any TypeScript, practice SQL directly in `psql`. This is important — you should understand what your code will ask the database to do.
-
-```bash
-psql taskforge
-```
-
-### INSERT — Create Data
-
-```sql
--- Create two projects
+-- Create a project
 INSERT INTO projects (name, description)
-VALUES ('Personal Website', 'Build my portfolio site');
+VALUES ('My First Project', 'Learning SQL')
+RETURNING *;
 
-INSERT INTO projects (name, description)
-VALUES ('TaskForge', 'The app we are building right now');
-
--- Create tasks for the first project (project_id = 1)
+-- Create a task for that project
 INSERT INTO tasks (project_id, title)
-VALUES (1, 'Design homepage layout');
+VALUES (1, 'Learn SELECT statements')
+RETURNING *;
 
-INSERT INTO tasks (project_id, title)
-VALUES (1, 'Choose color scheme');
-
-INSERT INTO tasks (project_id, title)
-VALUES (1, 'Write about me section');
-
--- Create tasks for the second project (project_id = 2)
-INSERT INTO tasks (project_id, title)
-VALUES (2, 'Set up database schema');
-
-INSERT INTO tasks (project_id, title)
-VALUES (2, 'Build CRUD API');
-```
-
-### SELECT — Read Data
-
-```sql
 -- Get all projects
 SELECT * FROM projects;
 
--- Get all tasks
-SELECT * FROM tasks;
-
--- Get tasks for project 1 only
+-- Get tasks for project 1
 SELECT * FROM tasks WHERE project_id = 1;
 
--- Get only incomplete tasks
-SELECT * FROM tasks WHERE completed = false;
-
--- Get tasks ordered by creation date (newest first)
-SELECT * FROM tasks ORDER BY created_at DESC;
-
--- Count tasks per project
-SELECT project_id, COUNT(*) as task_count
-FROM tasks
-GROUP BY project_id;
-```
-
-### UPDATE — Modify Data
-
-```sql
--- Mark a task as complete
+-- Mark a task complete
 UPDATE tasks SET completed = true, updated_at = NOW()
-WHERE id = 1;
-
--- Update a project name
-UPDATE projects SET name = 'Portfolio Website', updated_at = NOW()
-WHERE id = 1;
-
--- Verify the changes
-SELECT * FROM tasks WHERE id = 1;
-SELECT * FROM projects WHERE id = 1;
-```
-
-### DELETE — Remove Data
-
-```sql
--- Delete a single task
-DELETE FROM tasks WHERE id = 5;
-
--- Delete a project (CASCADE will delete its tasks too)
-DELETE FROM projects WHERE id = 2;
-
--- Verify: tasks for project 2 should be gone
-SELECT * FROM tasks WHERE project_id = 2;
-```
-
-### RETURNING — Get Back What You Changed
-
-PostgreSQL has a useful feature: you can ask it to return the rows affected by INSERT, UPDATE, or DELETE:
-
-```sql
--- Insert and get back the created row (with its auto-generated id)
-INSERT INTO projects (name, description)
-VALUES ('New Project', 'Testing RETURNING')
+WHERE id = 1
 RETURNING *;
 
--- Update and get back the changed row
-UPDATE tasks SET completed = true WHERE id = 2
-RETURNING *;
+-- Delete a project (tasks cascade!)
+DELETE FROM projects WHERE id = 1;
 
--- Delete and get back what was deleted
-DELETE FROM tasks WHERE id = 2
-RETURNING *;
+-- Verify tasks were deleted too
+SELECT * FROM tasks;
 ```
 
-We'll use `RETURNING *` extensively in our API — it saves us from having to do a separate SELECT after every INSERT or UPDATE.
+Exit psql: `\q`
 
-### Clean Up
+> **Key Concept: `RETURNING *`**
+> In PostgreSQL, `INSERT`, `UPDATE`, and `DELETE` can include `RETURNING *` to return the affected row(s). This is incredibly useful — instead of inserting a row and then doing a separate SELECT to get the generated ID and timestamps, you get everything in one query.
 
-Reset the database to a clean state before building the app:
+### 🧠 Think About It
 
-```sql
-\q
-```
+After the `DELETE FROM projects WHERE id = 1` above, what would `SELECT * FROM tasks` return?
 
-```bash
-psql taskforge < server/src/db/schema.sql
-```
+<details>
+<summary>Answer</summary>
 
-This drops and recreates the tables, removing the practice data.
+An empty table. `ON DELETE CASCADE` automatically deleted all tasks belonging to project 1. Without CASCADE, the DELETE would have failed with a foreign key constraint violation.
+
+</details>
 
 ---
 
-## Step 5: Build the Database Connection
+## 3. Connect to the Database from Node.js
 
-Now we connect Express to PostgreSQL using the `pg` library.
+> **Key Concept: Connection Pool**
+> A connection pool maintains a set of open database connections that are reused across requests. Without pooling, every API request would open a new connection (slow) and close it (wasteful). Think of it like a fleet of taxis: instead of buying a new car for each passenger, you reuse cars from a shared fleet.
 
-In VS Code, create a new file at `server/src/db/index.ts`.
+### 🏗️ Your Turn
 
-Add this code to `server/src/db/index.ts`:
+Create the database connection module. It needs to:
+1. Import the Pool class from `pg`
+2. Load environment variables with `dotenv`
+3. Create a pool with the `DATABASE_URL`
+4. Test the connection on startup
+5. Export the pool for use in routes
+
+<details>
+<summary>See the solution</summary>
+
+Create `server/src/db/index.ts`:
 
 ```typescript
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
-// Load environment variables from .env file
 dotenv.config();
 
-// Create a connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// Test the connection on startup
+// Test connection on startup
 pool.query('SELECT NOW()')
   .then(() => {
     console.log('Connected to PostgreSQL');
   })
-  .catch((err) => {
+  .catch((err: Error) => {
     console.error('Failed to connect to PostgreSQL:', err.message);
     process.exit(1);
   });
@@ -388,235 +205,73 @@ pool.query('SELECT NOW()')
 export default pool;
 ```
 
-### What Is a Connection Pool?
+</details>
 
-> [!NOTE]
-> **Technical**: A connection pool maintains a set of reusable database connections. Instead of opening and closing a connection for each query (expensive), the pool keeps connections open and lends them out as needed. The `pg` library's `Pool` class manages this automatically.
+**Line-by-line breakdown:**
 
-> [!NOTE]
-> **Plain English**: Opening a connection to a database takes time (like dialing a phone number). A pool keeps several phone lines open permanently. When your code needs to make a query, it borrows an open line, uses it, and returns it. This is much faster than dialing a new number every time.
+| Line | What It Does | Why |
+|------|-------------|-----|
+| `import { Pool } from 'pg'` | Import the connection pool class | Pool manages multiple reusable connections |
+| `dotenv.config()` | Load `.env` file into `process.env` | Makes `DATABASE_URL` available to the code |
+| `new Pool({ connectionString: ... })` | Create a pool pointing to your database | The pool lazily opens connections as needed |
+| `pool.query('SELECT NOW()')` | Test the connection with a simple query | Fail fast — if the database is unreachable, crash immediately instead of waiting for the first API request |
+| `.catch((err: Error) => { ... process.exit(1) })` | Handle connection failure | `process.exit(1)` stops the server. No point running if the database is down. |
 
-```
-WITHOUT POOLING:                    WITH POOLING:
-─────────────────                   ──────────────
+> ⚠️ **Common Mistake: Missing Error Type**
+> Writing `.catch((err) => { ... })` without typing `err` causes: `Parameter 'err' implicitly has an 'any' type`. Always type catch parameters: `.catch((err: Error) => { ... })`.
 
-Request 1 → Open connection         Request 1 → Borrow connection ─┐
-          → Query                              → Query              │
-          → Close connection                   → Return connection ─┤ Pool of
-                                                                    │ connections
-Request 2 → Open connection         Request 2 → Borrow connection ─┤ (reused)
-          → Query                              → Query              │
-          → Close connection                   → Return connection ─┘
+### ✅ Checkpoint
 
-Each open/close: ~20-50ms           Borrow/return: ~0.1ms
-```
-
-### Code Breakdown
-
-**`import { Pool } from 'pg'`**
-Imports the Pool class from the `pg` library. This is the recommended way to use `pg` in a web server.
-
-**`dotenv.config()`**
-Reads the `.env` file and puts its contents into `process.env`. After this line, `process.env.DATABASE_URL` contains `postgresql://localhost:5432/taskforge`.
-
-**`new Pool({ connectionString: process.env.DATABASE_URL })`**
-Creates a pool of database connections using the URL from the environment. The pool starts with 0 connections and creates them on demand, up to a default maximum of 10.
-
-**`pool.query('SELECT NOW()')`**
-Sends a test query to PostgreSQL. `SELECT NOW()` returns the current time — it's the simplest possible query that proves the connection works.
-
-**`process.exit(1)`**
-If the connection fails, the server exits with error code 1. There's no point running the server if it can't reach the database.
-
-### How pool.query Works
-
-When you call `pool.query(sql, params)` later in your routes:
-
-1. The pool finds an available connection (or creates one)
-2. It sends the SQL query to PostgreSQL
-3. PostgreSQL executes the query and returns results
-4. The pool receives the results and returns the connection to the pool
-5. You get back a result object with a `rows` array
-
-```typescript
-// Example (we'll use this pattern in routes):
-const result = await pool.query('SELECT * FROM projects');
-// result.rows = [{ id: 1, name: 'Website', ... }, { id: 2, name: 'API', ... }]
-```
-
----
-
-## Step 6: Migrations (Conceptual)
-
-In this project, we use a single `schema.sql` file that we run manually. This works fine for learning. But real production projects use **migration tools**.
-
-> [!NOTE]
-> **Technical**: Database migrations are versioned scripts that incrementally modify a database schema. Each migration file represents a single change (add a table, add a column, change a type). Tools like Knex.js, Prisma, or node-pg-migrate track which migrations have run and apply them in order.
-
-> [!NOTE]
-> **Plain English**: Instead of one big file that recreates everything, migrations are like Git commits for your database. Each one makes a small change: "add a `priority` column to tasks," "rename `name` to `title` in projects." The migration tool remembers which changes have been applied so you never run the same one twice.
-
-**Why we're not using a migration tool**: It adds complexity that would distract from learning SQL and database fundamentals. In Level 4, you may encounter migration tools in the context of testing. For now, `schema.sql` does the job.
-
----
-
-## Step 7: Test the Connection
-
-Let's verify Express can connect to PostgreSQL.
-
-Create a temporary test file. In VS Code, create `server/src/index.ts`:
-
-```typescript
-import dotenv from 'dotenv';
-dotenv.config();
-
-import pool from './db';
-
-async function testConnection() {
-  try {
-    const result = await pool.query('SELECT NOW() as current_time');
-    console.log('Database time:', result.rows[0].current_time);
-
-    const tables = await pool.query(`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-    `);
-    console.log('Tables:', tables.rows.map(r => r.table_name));
-
-    process.exit(0);
-  } catch (err) {
-    console.error('Connection test failed:', err);
-    process.exit(1);
-  }
-}
-
-testConnection();
-```
-
-Run it:
-
-> [!IMPORTANT]
-> **You should be in:** `task-forge/`
-
+Start the server:
 ```bash
 cd server
+npm run dev
 ```
 
-> [!IMPORTANT]
-> **You are now in:** `task-forge/server/`
+You should see: `Connected to PostgreSQL` and `Server running on http://localhost:3001`
+
+If you see `Failed to connect to PostgreSQL`:
+1. Is PostgreSQL running? → `brew services start postgresql@16`
+2. Does the database exist? → `createdb taskforge`
+3. Is the connection string correct in `.env`?
+
+---
+
+## 4. Commit
 
 ```bash
-npx ts-node src/index.ts
-```
-
-Expected output:
-
-```
-Connected to PostgreSQL
-Database time: 2026-03-02T...
-Tables: [ 'projects', 'tasks' ]
-```
-
-If you see this, your connection works. If you see an error, check:
-- Is PostgreSQL running? (`brew services list`)
-- Does the `taskforge` database exist? (`psql -l` to list databases)
-- Is your `.env` file correct? (`cat .env`)
-
-```bash
-cd ..
-```
-
-> [!IMPORTANT]
-> **You are now in:** `task-forge/` (back to the project root)
-
----
-
-## Step 8: Commit
-
-> [!IMPORTANT]
-> **You should be in:** `task-forge/`
-
-```bash
-git add server/src/db/
-git commit -m "feat: add database schema and connection pool"
+git add .
+git commit -m "feat: add database schema and PostgreSQL connection"
 ```
 
 ---
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    WHAT EXISTS NOW                                 │
-│                                                                  │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
-│   │  FRONTEND     │    │  BACKEND      │    │  DATABASE ✓  │     │
-│   │  (not built)  │    │  (partially)  │    │              │     │
-│   │              │    │              │    │  projects    │     │
-│   │              │    │  pool.query  │───▶│  tasks       │     │
-│   │              │    │  connected ✓ │    │              │     │
-│   │  NEXT: 05    │    │  NEXT: 04    │    │  Connected   │     │
-│   └──────────────┘    └──────────────┘    └──────────────┘     │
-│                                                                  │
-│   The database has tables. The backend can connect.              │
-│   Next: build the API routes that use SQL queries.              │
-└──────────────────────────────────────────────────────────────────┘
-```
+## 🧠 Spatial Check-In
 
----
+1. What is the relationship between the `projects` and `tasks` tables? How is it enforced?
 
-> [!TIP]
-> ## Spatial Check-In
+2. Why do we use a connection pool instead of opening a new connection for every query?
 
-1. **What is a foreign key?**
+3. If you change `ON DELETE CASCADE` to `ON DELETE RESTRICT`, what would happen when you try to delete a project that has tasks?
 
-<details><summary>Answer</summary>
+<details>
+<summary>Check Your Answers</summary>
 
-A column that references the primary key of another table. `tasks.project_id` references `projects.id`, creating a relationship between the two tables.
+1. **One-to-many:** One project has many tasks. It's enforced by the `project_id` foreign key in the `tasks` table, which references `projects(id)`. The database guarantees that every task's `project_id` corresponds to an existing project.
 
-</details>
+2. **Performance.** Opening a database connection takes ~20-50ms. If every API request opens a new connection, that adds up fast under load. A pool reuses a fixed number of open connections (default: 10), which is much faster.
 
-2. **What does ON DELETE CASCADE do?**
-
-<details><summary>Answer</summary>
-
-When a parent row is deleted, all child rows that reference it are automatically deleted too. Deleting a project automatically deletes all its tasks.
-
-</details>
-
-3. **What does SERIAL PRIMARY KEY do?**
-
-<details><summary>Answer</summary>
-
-Creates an auto-incrementing integer column that uniquely identifies each row. The database assigns the next number automatically.
-
-</details>
-
-4. **What is a connection pool?**
-
-<details><summary>Answer</summary>
-
-A set of reusable database connections. Instead of opening and closing connections for each query (slow), the pool keeps connections ready to use (fast).
-
-</details>
-
-5. **What does RETURNING * do in PostgreSQL?**
-
-<details><summary>Answer</summary>
-
-Returns the affected rows after an INSERT, UPDATE, or DELETE. This saves a separate SELECT query to get the data back.
-
-</details>
-
-6. **Why do we load dotenv before importing the pool?**
-
-<details><summary>Answer</summary>
-
-The pool reads `process.env.DATABASE_URL` when it's created. If dotenv hasn't loaded the `.env` file yet, the URL will be undefined and the connection will fail.
+3. **The DELETE would fail** with a foreign key constraint error. `RESTRICT` means "refuse to delete a parent if it has children." You'd have to delete all tasks first, then delete the project. `CASCADE` automates this.
 
 </details>
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 02 — Project Setup](../02-project-setup/) | [Level 2 Overview](../) | [04 — Building the Backend →](../04-backend/) |
+> **Session Break** — Database designed and connected.
+> When you return, you'll build the backend API in [Step 4 — Backend](../04-backend/).
+
+---
+
+| | |
+|:---|---:|
+| [← Step 2: Project Setup](../02-project-setup/) | [Step 4 — Backend →](../04-backend/) |

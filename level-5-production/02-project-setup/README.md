@@ -117,8 +117,15 @@ npm install express cors dotenv pg bcryptjs jsonwebtoken pino pino-http express-
 | `pino`, `pino-http`, `express-rate-limit` | Middleware | Carried from Level 4 |
 
 ```bash
-npm install -D typescript @types/express @types/cors @types/pg @types/bcryptjs @types/jsonwebtoken tsx vitest supertest @types/supertest pino-pretty
+npm install typescript @types/node @types/express @types/cors @types/pg @types/bcryptjs @types/jsonwebtoken
 ```
+
+```bash
+npm install -D tsx vitest supertest @types/supertest pino-pretty
+```
+
+> [!WARNING]
+> **`typescript` and all `@types/` packages MUST be in regular `dependencies`, not `devDependencies`.** Render skips `devDependencies` in production builds (`NODE_ENV=production`). If these packages are in `devDependencies`, `npm run build` (which runs `tsc`) will fail with `TS7016: Could not find declaration file` and `TS2580: Cannot find name 'process'` errors. The only exception is `@types/supertest` — it's only used in tests, never in production builds.
 
 ### TypeScript Configuration
 
@@ -138,7 +145,8 @@ Create `server/tsconfig.json`:
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]

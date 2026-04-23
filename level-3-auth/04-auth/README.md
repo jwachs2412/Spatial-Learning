@@ -1,41 +1,41 @@
-`Level 3` **Step 4 of 8** — Authentication
-
-# 04 — Authentication: Registration, Login, and JWT
+# Step 4 — Authentication: Registration, Login, and JWT
 
 ## Spatial Orientation
 
 ```
 vault-note/
-├── client/              ← NOT working here right now
 └── server/
     └── src/
-        ├── db/                   ← Already built ✓
         ├── types/
-        │   └── index.ts          ← Type definitions (we'll build this)
+        │   └── index.ts         ← Auth types
         ├── middleware/
-        │   ├── authenticate.ts   ← ★ JWT verification (we'll build this) ★
-        │   └── errorHandler.ts   ← Error handler (we'll build this)
+        │   ├── authenticate.ts  ← JWT verification middleware
+        │   └── errorHandler.ts  ← Error handler
         └── routes/
-            └── auth.ts           ← ★ Register + Login (we'll build this) ★
+            └── auth.ts          ← Register + Login endpoints
 ```
 
-**What are we building?** The authentication layer. This is the code that:
-1. Registers users (hash password, store in database)
-2. Logs users in (verify password, create JWT)
-3. Protects routes (verify JWT on every request)
-
-This is the most important lesson in Level 3. Everything else builds on it.
+This is the most security-critical code in the curriculum. Every line has a security reason.
 
 ---
 
-## Step 1: Define Types
+## 1. Define Types
 
-**Where?** `server/src/types/index.ts`
+### 🏗️ Your Turn
 
-In VS Code, create `server/src/types/index.ts`:
+Think about what types you need for an auth system:
+- A `User` type (everything in the database)
+- A `SafeUser` type (user data WITHOUT the password hash — for API responses)
+- A `JWTPayload` type (what goes inside the token)
+- An `AuthRequest` type (Express Request with user data attached by middleware)
+
+<details>
+<summary>See the solution</summary>
+
+Create `server/src/types/index.ts`:
 
 ```typescript
-// ─── DATABASE MODELS ────────────────────────────────────────────
+import { Request } from 'express';
 
 export interface User {
   id: number;
@@ -45,12 +45,21 @@ export interface User {
   created_at: string;
 }
 
-// User data that's safe to send to the frontend (no password_hash)
+// Never send password_hash to the client
 export interface SafeUser {
   id: number;
   email: string;
   role: string;
   created_at: string;
+}
+
+export interface JWTPayload {
+  userId: number;
+  role: string;
+}
+
+export interface AuthRequest extends Request {
+  user?: JWTPayload;
 }
 
 export interface Note {
@@ -62,18 +71,6 @@ export interface Note {
   updated_at: string;
 }
 
-// ─── REQUEST TYPES ──────────────────────────────────────────────
-
-export interface RegisterRequest {
-  email: string;
-  password: string;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
 export interface CreateNoteRequest {
   title: string;
   content?: string;
@@ -83,82 +80,68 @@ export interface UpdateNoteRequest {
   title?: string;
   content?: string;
 }
-
-// ─── AUTH TYPES ─────────────────────────────────────────────────
-
-export interface JWTPayload {
-  userId: number;
-  role: string;
-}
-
-export interface AuthRequest {
-  user: JWTPayload;
-}
 ```
 
-### Key Design Decision: SafeUser
+</details>
 
-Notice `SafeUser` — it's `User` without `password_hash`. When the API returns user data, we **never** include the hash. Even though bcrypt hashes can't be reversed, there's no reason to send them to the frontend. Less data leaked = better security.
-
-```typescript
-// WRONG — leaks password_hash to the frontend:
-res.json(user);  // { id: 1, email: "...", password_hash: "$2b$10$..." }
-
-// RIGHT — only safe fields:
-const { password_hash, ...safeUser } = user;
-res.json(safeUser);  // { id: 1, email: "...", role: "user" }
-```
+**Key decision: `SafeUser` omits `password_hash`.** The password hash should NEVER leave the server. `SafeUser` is what you send in API responses. This type-level separation prevents accidental leaks.
 
 ---
 
-## Step 2: Build the Error Handler
+## 2. Build the Error Handler
 
-**Where?** `server/src/middleware/errorHandler.ts`
-
-Same pattern as Level 2:
+Create `server/src/middleware/errorHandler.ts`:
 
 ```typescript
 import { Request, Response, NextFunction } from 'express';
 
-export function errorHandler(
+export const errorHandler = (
   err: Error,
   _req: Request,
   res: Response,
-  _next: NextFunction
-) {
+  _next: NextFunction,
+): void => {
   console.error('Error:', err.message);
-
-  res.status(500).json({
-    error: 'Internal server error',
-  });
-}
+  res.status(500).json({ error: 'Internal server error' });
+};
 ```
 
 ---
 
-## Step 3: Build the Auth Middleware
+## 3. Build the Auth Middleware
 
-**Where?** `server/src/middleware/authenticate.ts`
+> **Key Concept: Auth Middleware**
+> This middleware runs BEFORE your route handlers. It extracts the JWT from the `Authorization` header, verifies the signature, and attaches the user data to the request object. If the token is invalid or missing, it returns 401 immediately — the route handler never runs.
 
-This is the gatekeeper. It runs before every protected route. Its job: extract the JWT from the request, verify it, and attach the user data to the request.
+### 🏗️ Your Turn
+
+Build the authenticate middleware. It needs to:
+1. Read the `Authorization` header
+2. Extract the token (format: `Bearer <token>`)
+3. Verify the token using `jwt.verify(token, JWT_SECRET)`
+4. Attach the decoded payload to `req.user`
+5. Call `next()` to continue to the route handler
+6. Return 401 if token is missing or invalid
+
+Also build a `requireAdmin` middleware that checks `req.user.role === 'admin'`.
+
+<details>
+<summary>See the solution</summary>
+
+Create `server/src/middleware/authenticate.ts`:
 
 ```typescript
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { JWTPayload } from '../types';
+import { AuthRequest, JWTPayload } from '../types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
-/**
- * Authentication middleware.
- *
- * Expects: Authorization: Bearer <token> in request headers.
- *
- * If valid:   Attaches req.user = { userId, role } and calls next()
- * If invalid: Sends 401 Unauthorized
- */
-export function authenticate(req: Request, res: Response, next: NextFunction) {
-  // 1. Get the Authorization header
+export const authenticate = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): void => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -166,575 +149,299 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     return;
   }
 
-  // 2. Extract the token (everything after "Bearer ")
   const token = authHeader.split(' ')[1];
 
   try {
-    // 3. Verify the token signature and decode the payload
-    const payload = jwt.verify(token, JWT_SECRET) as JWTPayload;
-
-    // 4. Attach user data to the request object
-    (req as any).user = payload;
-
-    // 5. Continue to the route handler
+    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    req.user = decoded;
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
   }
-}
+};
 
-/**
- * Authorization middleware for admin-only routes.
- * Must be used AFTER authenticate middleware.
- */
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const user = (req as any).user as JWTPayload;
-
-  if (user.role !== 'admin') {
+export const requireAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): void => {
+  if (req.user?.role !== 'admin') {
     res.status(403).json({ error: 'Admin access required' });
     return;
   }
-
   next();
-}
+};
 ```
 
-### How This Middleware Works
+</details>
 
-```
-INCOMING REQUEST:
-GET /api/notes
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjF9.abc123
+**Line-by-line breakdown:**
 
-           │
-           ▼
-┌──────────────────────────────────────────┐
-│  authenticate middleware                  │
-│                                          │
-│  1. Read Authorization header            │
-│     → "Bearer eyJhbGciOiJ..."            │
-│                                          │
-│  2. Extract token                        │
-│     → "eyJhbGciOiJ..."                   │
-│                                          │
-│  3. jwt.verify(token, JWT_SECRET)        │
-│     → Checks signature                   │
-│     → Decodes payload: { userId: 1,      │
-│                          role: "user" }   │
-│                                          │
-│  4. req.user = { userId: 1, role: "user"}│
-│                                          │
-│  5. next() → continue to route handler   │
-└──────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────┐
-│  Route handler                            │
-│                                          │
-│  const userId = (req as any).user.userId │
-│  // → 1                                  │
-│                                          │
-│  pool.query('SELECT * FROM notes         │
-│    WHERE user_id = $1', [userId])        │
-│  // → Only this user's notes             │
-└──────────────────────────────────────────┘
-```
+| Line | What It Does | Why |
+|------|-------------|-----|
+| `req.headers.authorization` | Read the Authorization header | Tokens are sent as `Authorization: Bearer <token>` |
+| `authHeader.startsWith('Bearer ')` | Check the format | The `Bearer ` prefix is an HTTP standard for token auth |
+| `authHeader.split(' ')[1]` | Extract just the token string | Removes the `Bearer ` prefix |
+| `jwt.verify(token, JWT_SECRET)` | Verify the signature | If the token was tampered with, this throws |
+| `as JWTPayload` | Cast the decoded data to our type | `jwt.verify` returns a generic type |
+| `req.user = decoded` | Attach user data to the request | Route handlers can now access `req.user.userId` |
 
-### Key Concepts
-
-**`Authorization: Bearer <token>`**
-
-> [!NOTE]
-> **Technical**: The Bearer authentication scheme is defined in RFC 6750. The client sends the token in the `Authorization` header with the `Bearer` prefix. The server extracts and validates the token.
-
-> [!NOTE]
-> **Plain English**: It's a convention: "Here's my token (my wristband). The word 'Bearer' just means 'the person carrying this token.'" Every protected request includes this header.
-
-**`jwt.verify(token, JWT_SECRET)`**
-
-This does two things:
-1. Checks that the signature matches (proves the token wasn't tampered with)
-2. Checks that the token hasn't expired (if an expiry was set)
-
-If either check fails, it throws an error, and we send 401 Unauthorized.
-
-**`(req as any).user`**
-
-Express's Request type doesn't include a `user` property by default. We use `as any` to attach it. In production projects, you'd extend the Express Request type. For learning, `as any` keeps things simple.
-
-**401 vs 403**
-
-| Code | Meaning | When to Use |
-|------|---------|-------------|
-| 401 Unauthorized | "I don't know who you are" | No token, invalid token, expired token |
-| 403 Forbidden | "I know who you are, but you can't do this" | Valid token, but wrong role (e.g., user trying admin route) |
+> ⚠️ **Common Mistake: `AuthRequest` extends `Request`**
+> Standard Express `Request` doesn't have a `user` property. We created `AuthRequest` that extends `Request` and adds `user?: JWTPayload`. The middleware uses `AuthRequest`, and so do protected route handlers.
 
 ---
 
-> [!TIP]
-> **Session Break** — You've built the JWT utilities and auth middleware that protect routes. Save your work and take a break.
-> When you return, you'll build the registration and login routes.
+## 4. Build Auth Routes
 
----
+### 🏗️ Your Turn — Registration
 
-## Step 4: Build the Auth Routes
+Build the register endpoint. It needs to:
+1. Validate email and password (email required, password 8+ characters)
+2. Check if email already exists (return 409 Conflict if so)
+3. Hash the password with bcrypt
+4. Insert the user into the database (using `RETURNING` but excluding `password_hash`)
+5. Create a JWT token
+6. Return the token and safe user data
 
-**Where?** `server/src/routes/auth.ts`
+Hints:
+- `bcrypt.hash(password, 10)` — the 10 is the cost factor (iterations of hashing)
+- `jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })`
+- Use `email.toLowerCase()` for case-insensitive matching
 
-This file handles registration, login, and the "who am I" endpoint.
+<details>
+<summary>See the solution</summary>
+
+Create `server/src/routes/auth.ts`:
 
 ```typescript
 import { Router, Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../db';
-import { RegisterRequest, LoginRequest, JWTPayload } from '../types';
+import { SafeUser, AuthRequest } from '../types';
 import { authenticate } from '../middleware/authenticate';
 
 const router = Router();
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const SALT_ROUNDS = 10;
 
-// Helper: create a JWT for a user
-function createToken(userId: number, role: string): string {
-  return jwt.sign(
-    { userId, role } as JWTPayload,
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
-  );
-}
+// POST /api/auth/register
+router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body;
 
-// ─── POST /api/auth/register ────────────────────────────────────
-// Create a new user account.
-//
-// Body: { email: "user@example.com", password: "securepassword" }
-// Response: 201, { token: "eyJ...", user: { id, email, role } }
-router.post(
-  '/register',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { email, password } = req.body as RegisterRequest;
-
-      // ─── VALIDATION ──────────────────────────────────────────
-      if (!email || typeof email !== 'string') {
-        res.status(400).json({ error: 'Email is required' });
-        return;
-      }
-
-      // Basic email format check
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        res.status(400).json({ error: 'Invalid email format' });
-        return;
-      }
-
-      if (!password || typeof password !== 'string') {
-        res.status(400).json({ error: 'Password is required' });
-        return;
-      }
-
-      if (password.length < 8) {
-        res.status(400).json({ error: 'Password must be at least 8 characters' });
-        return;
-      }
-
-      // ─── CHECK IF EMAIL ALREADY EXISTS ───────────────────────
-      const existing = await pool.query(
-        'SELECT id FROM users WHERE email = $1',
-        [email.toLowerCase()]
-      );
-
-      if (existing.rows.length > 0) {
-        res.status(409).json({ error: 'Email already registered' });
-        return;
-      }
-
-      // ─── HASH PASSWORD ──────────────────────────────────────
-      const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-      // ─── INSERT USER ────────────────────────────────────────
-      const result = await pool.query(
-        'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role, created_at',
-        [email.toLowerCase(), passwordHash]
-      );
-
-      const user = result.rows[0];
-
-      // ─── CREATE TOKEN ───────────────────────────────────────
-      const token = createToken(user.id, user.role);
-
-      res.status(201).json({ token, user });
-    } catch (err) {
-      next(err);
+    // Validate
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required' });
+      return;
     }
-  }
-);
 
-// ─── POST /api/auth/login ───────────────────────────────────────
-// Authenticate an existing user.
-//
-// Body: { email: "user@example.com", password: "securepassword" }
-// Response: 200, { token: "eyJ...", user: { id, email, role } }
-router.post(
-  '/login',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { email, password } = req.body as LoginRequest;
-
-      // ─── VALIDATION ──────────────────────────────────────────
-      if (!email || !password) {
-        res.status(400).json({ error: 'Email and password are required' });
-        return;
-      }
-
-      // ─── FIND USER ──────────────────────────────────────────
-      const result = await pool.query(
-        'SELECT * FROM users WHERE email = $1',
-        [email.toLowerCase()]
-      );
-
-      if (result.rows.length === 0) {
-        // Don't reveal whether the email exists or not
-        res.status(401).json({ error: 'Invalid email or password' });
-        return;
-      }
-
-      const user = result.rows[0];
-
-      // ─── VERIFY PASSWORD ────────────────────────────────────
-      const isMatch = await bcrypt.compare(password, user.password_hash);
-
-      if (!isMatch) {
-        res.status(401).json({ error: 'Invalid email or password' });
-        return;
-      }
-
-      // ─── CREATE TOKEN ───────────────────────────────────────
-      const token = createToken(user.id, user.role);
-
-      // Send user data WITHOUT password_hash
-      const { password_hash, ...safeUser } = user;
-      res.json({ token, user: safeUser });
-    } catch (err) {
-      next(err);
+    if (password.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters' });
+      return;
     }
-  }
-);
 
-// ─── GET /api/auth/me ───────────────────────────────────────────
-// Get the current authenticated user's info.
-// Requires: valid JWT in Authorization header.
-router.get(
-  '/me',
-  authenticate,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { userId } = (req as any).user as JWTPayload;
+    const normalizedEmail = email.toLowerCase().trim();
 
-      const result = await pool.query(
-        'SELECT id, email, role, created_at FROM users WHERE id = $1',
-        [userId]
-      );
+    // Check for existing user
+    const existingUser = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [normalizedEmail]
+    );
 
-      if (result.rows.length === 0) {
-        res.status(404).json({ error: 'User not found' });
-        return;
-      }
-
-      res.json(result.rows[0]);
-    } catch (err) {
-      next(err);
+    if (existingUser.rows.length > 0) {
+      res.status(409).json({ error: 'Email already registered' });
+      return;
     }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+    // Create user (RETURNING excludes password_hash)
+    const result = await pool.query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role, created_at',
+      [normalizedEmail, passwordHash]
+    );
+
+    const user: SafeUser = result.rows[0];
+
+    // Create token
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.status(201).json({ token, user });
+  } catch (err) {
+    next(err);
   }
-);
+});
+
+// POST /api/auth/login
+router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required' });
+      return;
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find user
+    const result = await pool.query(
+      'SELECT * FROM users WHERE email = $1',
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
+    }
+
+    const user = result.rows[0];
+
+    // Compare password
+    const isValid = await bcrypt.compare(password, user.password_hash);
+
+    if (!isValid) {
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
+    }
+
+    // Create token
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    const safeUser: SafeUser = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      created_at: user.created_at,
+    };
+
+    res.json({ token, user: safeUser });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/auth/me — Get current user (protected)
+router.get('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, role, created_at FROM users WHERE id = $1',
+      [req.user!.userId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
 
 export { router as authRouter };
 ```
 
-### Registration Flow Explained
+</details>
 
-```
-Client sends: { email: "alice@example.com", password: "mypassword123" }
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │  1. Validate email + password  │
-                    │     Is email valid format?     │
-                    │     Is password 8+ chars?      │
-                    └───────────────┬───────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │  2. Check if email exists      │
-                    │     SELECT FROM users          │
-                    │     WHERE email = $1           │
-                    └───────────────┬───────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │  3. Hash the password          │
-                    │     bcrypt.hash(password, 10)  │
-                    │                               │
-                    │     "mypassword123"            │
-                    │        ↓                       │
-                    │     "$2b$10$X7vK9z...q3Fy"     │
-                    └───────────────┬───────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │  4. Store in database          │
-                    │     INSERT INTO users          │
-                    │     (email, password_hash)     │
-                    │     VALUES ($1, $2)            │
-                    │                               │
-                    │     Plain text password is     │
-                    │     NEVER stored anywhere      │
-                    └───────────────┬───────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │  5. Create JWT token           │
-                    │     jwt.sign(                  │
-                    │       { userId: 1, role: "user"},│
-                    │       JWT_SECRET,              │
-                    │       { expiresIn: "7d" }      │
-                    │     )                          │
-                    └───────────────┬───────────────┘
-                                    │
-                                    ▼
-              Send back: { token: "eyJ...", user: { id: 1, email: "...", role: "user" } }
-```
+### 🔐 Security Exercise
 
-### Key Security Details
-
-**`bcrypt.hash(password, SALT_ROUNDS)`**
-
-The second argument is the cost factor (salt rounds). Higher = slower = more secure. 10 is the standard recommendation — it takes about 100ms to hash, which is fast enough for login but slow enough to make brute-force attacks impractical.
-
-**`bcrypt.compare(password, hash)`**
-
-This does NOT decrypt the hash (that's impossible). It hashes the provided password with the same salt and algorithm, then compares the results. If they match, the password is correct.
-
-**"Invalid email or password" (not "Email not found" or "Wrong password")**
-
-> [!WARNING]
-> Never reveal which part of the login failed. If you say "Email not found," an attacker learns which emails are registered. If you say "Wrong password," they know the email exists and can focus on guessing the password. Always use a generic message: "Invalid email or password."
-
-**`email.toLowerCase()`**
-
-Emails are case-insensitive. `Alice@Example.com` and `alice@example.com` are the same mailbox. We lowercase before storing and querying to prevent duplicate accounts.
-
-**409 Conflict**
-
-The status code for "email already registered." 409 means "the request conflicts with the current state of the resource."
-
-**RETURNING without password_hash**
-
-```sql
-INSERT INTO users (email, password_hash)
-VALUES ($1, $2)
-RETURNING id, email, role, created_at
-```
-
-We explicitly list which columns to return, omitting `password_hash`. This is safer than `RETURNING *` followed by deleting the field in code.
-
----
-
-> [!TIP]
-> **Session Break** — You've built the complete auth routes with registration, login, and token verification. Save your work and take a break.
-> When you return, you'll test all the auth endpoints with curl.
-
----
-
-## Step 5: Test the Auth Endpoints
-
-Create a temporary server to test. Replace `server/src/index.ts` with:
-
+The login route returns the same error for "email not found" and "wrong password":
 ```typescript
-import dotenv from 'dotenv';
-dotenv.config();
-
-import express from 'express';
-import cors from 'cors';
-import { authRouter } from './routes/auth';
-import { errorHandler } from './middleware/errorHandler';
-
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-app.use(express.json());
-app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' }));
-
-app.use('/api/auth', authRouter);
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
-});
-
-app.use(errorHandler);
-
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+res.status(401).json({ error: 'Invalid email or password' });
 ```
 
-Start the server:
+Why not tell the user specifically which one was wrong?
 
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
+<details>
+<summary>Answer</summary>
+
+**Enumeration attack prevention.** If you return "No account with that email," an attacker can probe your API to build a list of valid email addresses. Then they only need to crack passwords for known accounts. By returning a generic message, you don't reveal whether an email exists in your system.
+
+</details>
+
+---
+
+## 5. Test Auth Endpoints
 
 ```bash
-cd server
-npm run dev
-```
-
-In a second terminal, test:
-
-### Register
-
-```bash
+# Register
 curl -X POST http://localhost:3001/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"password123"}'
-```
+  -d '{"email": "test@example.com", "password": "password123"}'
 
-Expected: `{"token":"eyJ...","user":{"id":1,"email":"alice@example.com","role":"user","created_at":"..."}}`
-
-**Copy the token** — you'll need it for the next test.
-
-### Register Duplicate (Should Fail)
-
-```bash
-curl -X POST http://localhost:3001/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"differentpassword"}'
-```
-
-Expected: `{"error":"Email already registered"}`
-
-### Login
-
-```bash
+# Login
 curl -X POST http://localhost:3001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"password123"}'
-```
+  -d '{"email": "test@example.com", "password": "password123"}'
 
-Expected: `{"token":"eyJ...","user":{...}}`
-
-### Login Wrong Password
-
-```bash
-curl -X POST http://localhost:3001/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"wrongpassword"}'
-```
-
-Expected: `{"error":"Invalid email or password"}`
-
-### Get Current User (Authenticated)
-
-```bash
+# Get current user (use the token from login response)
 curl http://localhost:3001/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Test invalid token
+curl http://localhost:3001/api/auth/me \
+  -H "Authorization: Bearer invalid-token"
 ```
 
-Replace `YOUR_TOKEN_HERE` with the token from the register or login response.
+### ✅ Checkpoint
 
-Expected: `{"id":1,"email":"alice@example.com","role":"user","created_at":"..."}`
+- [ ] Register creates a user and returns a token
+- [ ] Login with correct credentials returns a token
+- [ ] Login with wrong password returns generic error
+- [ ] `/me` with valid token returns user data (no password_hash!)
+- [ ] `/me` without token returns 401
+- [ ] Registering with existing email returns 409
 
-### Get Current User (No Token)
+---
+
+## 6. Commit
 
 ```bash
-curl http://localhost:3001/api/auth/me
-```
-
-Expected: `{"error":"No token provided"}`
-
-Stop the server and go back to the project root:
-
-```bash
-cd ..
-```
-
-> [!IMPORTANT]
-> **You are now in:** `vault-note/`
-
----
-
-## Step 6: Commit
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
-
-```bash
-git add server/src/
-git commit -m "feat: add authentication with registration, login, and JWT middleware"
+git add .
+git commit -m "feat: add auth routes with JWT, bcrypt, and middleware"
 ```
 
 ---
 
-## Where Tokens Are Stored (and the Trade-offs)
+## 🧠 Spatial Check-In
 
-In this project, the frontend stores the JWT in `localStorage`. Here's the trade-off:
+1. Why do we use `SALT_ROUNDS = 10` with bcrypt? What happens if you increase it?
 
-| Storage | Pros | Cons |
-|---------|------|------|
-| **localStorage** | Simple to implement, persists across tabs, easy to read in JS | Vulnerable to XSS (if attacker injects JS, they can read the token) |
-| **HTTP-only cookie** | JavaScript can't read it (XSS-safe), sent automatically | Requires more backend setup, vulnerable to CSRF, more complex CORS |
+2. The `RETURNING` clause in the register INSERT excludes `password_hash`. Why is this important?
 
-> [!NOTE]
-> **For learning, localStorage is the right choice.** It's simpler, the auth flow is more visible (you can see the token in DevTools), and XSS protection is better handled by not having XSS vulnerabilities in the first place. In production, HTTP-only cookies are considered more secure. The concepts are the same — only the storage mechanism differs.
+3. What would happen if the `JWT_SECRET` was committed to GitHub in your source code?
 
----
+<details>
+<summary>Check Your Answers</summary>
 
-> [!TIP]
-> ## Spatial Check-In
+1. **Cost factor.** 10 means 2^10 = 1024 iterations of the hashing algorithm. Each increment doubles the time. At 10, hashing takes ~100ms — slow enough to deter brute-force, fast enough for normal use. At 15, it takes ~3 seconds — too slow for user registration.
 
-1. **What does bcrypt.hash() do?**
+2. **Defense in depth.** Even if there's a bug later that sends the raw database row to the client, the password hash was never selected from the database. The `RETURNING` clause acts as a second layer of protection (the first being `SafeUser`).
 
-<details><summary>Answer</summary>
-
-Takes a plain text password and a salt rounds number, returns a one-way hash. The same password produces different hashes each time (due to random salt), but bcrypt.compare() can still verify them.
-
-</details>
-
-2. **What does jwt.sign() do?**
-
-<details><summary>Answer</summary>
-
-Creates a JWT token by encoding a payload (like `{ userId: 1, role: "user" }`) and signing it with a secret key. The signature proves the token was created by our server.
-
-</details>
-
-3. **What does jwt.verify() do?**
-
-<details><summary>Answer</summary>
-
-Takes a token and the secret key, checks that the signature is valid and the token hasn't expired. Returns the decoded payload if valid, throws an error if not.
-
-</details>
-
-4. **Why does the login route say "Invalid email or password" instead of specifying which is wrong?**
-
-<details><summary>Answer</summary>
-
-To prevent information leakage. Saying "email not found" tells attackers which emails are registered. A generic message gives no useful information to an attacker.
-
-</details>
-
-5. **What is the difference between 401 and 403?**
-
-<details><summary>Answer</summary>
-
-401 means "I don't know who you are" (missing/invalid token). 403 means "I know who you are, but you're not allowed" (valid token, insufficient permissions).
+3. **Anyone could forge tokens.** With the secret, an attacker creates valid JWTs with any userId and role (including admin). They'd have full access to every user's data. This is why `JWT_SECRET` lives in environment variables, never in code.
 
 </details>
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 03 — Database Design](../03-database/) | [Level 3 Overview](../) | [05 — Building the Backend →](../05-backend/) |
+> **Session Break** — Authentication system built.
+> When you return, you'll build protected CRUD routes in [Step 5 — Backend](../05-backend/).
+
+---
+
+| | |
+|:---|---:|
+| [← Step 3: Database](../03-database/) | [Step 5 — Backend →](../05-backend/) |

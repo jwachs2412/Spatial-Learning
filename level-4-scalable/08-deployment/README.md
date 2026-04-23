@@ -133,27 +133,45 @@ git push -u origin main
 
 ---
 
-## Step 4: Deploy the Database (Render PostgreSQL)
+## Step 4: Deploy the Database
+
+> [!WARNING]
+> **Render's free PostgreSQL has a 90-day expiration and only 1 free database per account.** If you already used it for Level 2 or Level 3, choose Supabase or Neon instead.
+
+### Option A: Supabase (Recommended)
+
+1. Go to [supabase.com](https://supabase.com) → **New Project**
+2. Name: `datadash`, set a database password, choose a region
+3. Go to **Project Settings** → **Database** → **Connection string** → **URI**
+4. Run schema and seed:
+
+```bash
+psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
+DATABASE_URL="YOUR_SUPABASE_CONNECTION_STRING" npx tsx server/src/db/seed.ts
+```
+
+### Option B: Neon (Serverless PostgreSQL)
+
+1. Go to [neon.tech](https://neon.tech) → **Create Project**: `datadash`
+2. Copy the connection string
+3. Run schema and seed:
+
+```bash
+psql "YOUR_NEON_CONNECTION_STRING" < server/src/db/schema.sql
+DATABASE_URL="YOUR_NEON_CONNECTION_STRING" npx tsx server/src/db/seed.ts
+```
+
+### Option C: Render PostgreSQL
+
+> Only use if you haven't used your free Render database for a previous level.
 
 1. Go to [render.com](https://render.com) → **"New"** → **"PostgreSQL"**
-2. Configure:
-   - **Name**: `datadash-db`
-   - **Database**: `datadash`
-   - **Region**: Same as previous projects
-   - **Plan**: Free
-
-3. Click **"Create Database"**
-4. Copy both the **Internal** and **External** Database URLs
-
-### Run Schema on Production
+2. Configure: Name: `datadash-db`, Database: `datadash`, Plan: Free
+3. Copy both the **Internal** and **External** Database URLs
+4. Run schema and seed using the **External** URL:
 
 ```bash
 psql "YOUR_EXTERNAL_DATABASE_URL" < server/src/db/schema.sql
-```
-
-### Seed Production Data
-
-```bash
 DATABASE_URL="YOUR_EXTERNAL_DATABASE_URL" npx tsx server/src/db/seed.ts
 ```
 
@@ -161,6 +179,15 @@ DATABASE_URL="YOUR_EXTERNAL_DATABASE_URL" npx tsx server/src/db/seed.ts
 > **Use the External URL** for the seed command — you're connecting from your local machine. The Internal URL only works between Render services. After seeding, the backend will use the Internal URL for fast, private connections.
 
 Expected output: `Seeded ~5400 events across 90 days.`
+
+### Portfolio Strategy
+
+| Level | Database Provider | Reason |
+|-------|------------------|--------|
+| Level 2 — TaskForge | Supabase | 2 free projects |
+| Level 3 — VaultNote | Neon | Free serverless PostgreSQL |
+| Level 4 — DataDash | Supabase (2nd project) | Or Render if unused |
+| Level 5 — CollabBoard | Neon (2nd project) | Or Render if unused |
 
 ---
 
@@ -220,11 +247,21 @@ Expected: JSON with page views, signups, revenue, and avg session duration.
 
 5. Click **"Deploy"**
 
-### Update Render CORS
+### Update Backend CORS
 
-Go back to Render → your web service → Environment:
+Go back to your backend hosting dashboard (Render/Railway) → Environment:
 - Set `CORS_ORIGIN` to your Vercel URL: `https://data-dash-xxxxx.vercel.app`
-- Save → Render redeploys automatically
+- Save → the service redeploys automatically
+
+> [!WARNING]
+> **No trailing slash in CORS_ORIGIN!** This is the #1 production deployment bug.
+>
+> ```
+> ✗ CORS_ORIGIN=https://data-dash.vercel.app/    ← WRONG (trailing slash)
+> ✓ CORS_ORIGIN=https://data-dash.vercel.app      ← CORRECT (no trailing slash)
+> ```
+>
+> The browser sends `Origin: https://data-dash.vercel.app` (no slash). If your CORS_ORIGIN has a trailing slash, they don't match, and every request fails with `Access-Control-Allow-Origin` errors.
 
 ---
 
@@ -264,11 +301,14 @@ With a `429 Too Many Requests` status code.
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| Charts don't render | VITE_API_URL wrong or CORS error | Check Vercel env var, verify CORS_ORIGIN on Render |
-| "Cannot connect to database" | DATABASE_URL wrong | Verify Internal URL is set on Render |
-| No data in charts | Production DB not seeded | Run the seed command with External URL |
+| CORS error | Trailing slash in CORS_ORIGIN | Remove the trailing slash from CORS_ORIGIN |
+| Charts don't render | VITE_API_URL wrong or CORS error | Check Vercel env var, verify CORS_ORIGIN has no trailing slash |
+| `TS2580: Cannot find name 'process'` | Missing `"types": ["node"]` in tsconfig | Add `"types": ["node"]` to `compilerOptions` in `server/tsconfig.json` |
+| `TS7016: Could not find declaration file` | @types in devDependencies | Move `@types/node`, `@types/express`, `@types/cors`, `@types/pg` to regular `dependencies` |
+| "Cannot connect to database" | DATABASE_URL wrong | Verify connection string is set correctly |
+| No data in charts | Production DB not seeded | Run the seed command with the External/public connection URL |
 | 429 errors on normal use | Rate limit too strict | Increase `max` in rateLimiter.ts, redeploy |
-| 502 on backend | Server crash | Check Render logs — likely missing env var |
+| 502 on backend | Server crash | Check logs — likely missing env var |
 | Charts show "NaN" | Number parsing issue | Check that `Number()` casts are in service layer |
 | Blank page | Build error | Check Vercel build logs for TypeScript errors |
 

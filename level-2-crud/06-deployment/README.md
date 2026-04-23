@@ -1,381 +1,277 @@
-`Level 2` **Step 6 of 7** — Deployment
-
-# 06 — Deployment: Shipping a Three-Tier App
+# Step 6 — Deployment: Shipping a Three-Tier App
 
 ## Spatial Orientation
 
-You're about to deploy three things instead of two:
-
 ```
-BEFORE (localhost)                      AFTER (internet)
-──────────────────                      ────────────────────
-
-Your Computer                           The Internet
-┌────────────────────┐                 ┌──────────────────────────────────┐
-│ localhost:5173      │                 │  task-forge.vercel.app           │
-│ localhost:3001      │                 │  task-forge-api.onrender.com     │
-│ localhost:5432      │                 │  Render PostgreSQL (managed)     │
-│                    │                 │                                  │
-│ Only YOU can access │                 │ ANYONE can access                │
-│ 3 things running   │                 │ 3 things running 24/7            │
-└────────────────────┘                 └──────────────────────────────────┘
+DEVELOPMENT                              PRODUCTION
+┌────────┐ ┌────────┐ ┌────────┐        ┌────────┐ ┌────────┐ ┌──────────┐
+│Frontend│ │Backend │ │Database│  ───▶  │Vercel  │ │Render/ │ │ Supabase/│
+│ :5173  │ │ :3001  │ │ :5432  │        │(CDN)   │ │Railway │ │ Neon/    │
+│        │ │        │ │        │        │        │ │        │ │ Render   │
+└────────┘ └────────┘ └────────┘        └────────┘ └────────┘ └──────────┘
+  localhost   localhost   localhost         .vercel    .onrender   managed
+                                           .app       .com        PostgreSQL
 ```
 
-**What's new vs Level 1 deployment**: You now need a managed PostgreSQL database in the cloud. Render provides this for free (limited tier). The database gets its own connection URL that your backend uses instead of `localhost:5432`.
+This is your first three-tier deployment: frontend, backend, AND database — all on separate services.
 
 ---
 
-## Step 1: Verify Everything Works Locally
+## 1. Verify Locally
 
-Before deploying, make sure the full stack works on your machine. You need two terminals.
-
-**Terminal 1 — Backend:**
-
-> [!IMPORTANT]
-> **You should be in:** `task-forge/`
+Before deploying, make sure everything works:
 
 ```bash
-cd server
-npm run dev
+# Terminal 1
+cd server && npm run dev
+
+# Terminal 2
+cd client && npm run dev
 ```
 
-Expected: `Connected to PostgreSQL` and `Server running on http://localhost:3001`
+Create a project, add tasks, toggle them, delete one, refresh the page — data should persist.
 
-**Terminal 2 — Frontend:**
-
-> [!IMPORTANT]
-> **You should be in:** `task-forge/`
+Also verify the build works:
 
 ```bash
-cd client
-npm run dev
+cd server && npm run build
 ```
 
-Open `http://localhost:5173` in your browser. Test the full cycle:
-
-1. Create a project → it appears in the list
-2. Click the project → see the detail view
-3. Add tasks → they appear in the task list
-4. Toggle a task's checkbox → it marks as completed
-5. Double-click a task title → edit it → press Enter
-6. Delete a task → it disappears
-7. Click "Back to Projects" → see all projects
-8. Delete a project → it and its tasks disappear
-
-### The Key Test: Data Persistence
-
-Stop the backend (`Ctrl+C` in Terminal 1). Start it again (`npm run dev`).
-
-Refresh the browser. **All your data should still be there.**
-
-This is the "aha" moment. In Level 1, restarting the server lost everything. Now data survives because it's in PostgreSQL, not memory.
-
-Stop both servers when you're done testing.
+If this fails, fix the TypeScript errors before deploying.
 
 ---
 
-## Step 2: Push to GitHub
-
-> [!IMPORTANT]
-> **You should be in:** `task-forge/` (the project root)
-
-First, make sure all work is committed:
-
-```bash
-git status
-```
-
-If you see uncommitted changes, add and commit them:
+## 2. Push to GitHub
 
 ```bash
 git add .
 git commit -m "chore: prepare for deployment"
-```
 
-Create the GitHub repository and push:
-
-```bash
-# Option A: Using GitHub CLI
+# Create repo and push
 gh repo create task-forge --public --source=. --remote=origin --push
 
-# Option B: Manual
-# 1. Go to github.com and create a new repository called "task-forge"
-# 2. Do NOT initialize with a README (you already have one)
-# 3. Then run:
+# Or manually: create on github.com, then:
 git remote add origin git@github.com:yourusername/task-forge.git
+git branch -M main
 git push -u origin main
 ```
 
 ---
 
-## Step 3: Deploy the Database (Render PostgreSQL)
+## 3. Deploy the Database
 
-This is the new step that Level 1 didn't have. You need a PostgreSQL database running in the cloud.
+You have several options. Choose based on your needs:
 
-### Create a Render PostgreSQL Instance
+### Option A: Supabase (Recommended)
 
-1. Go to [render.com](https://render.com) and log in (same account as Level 1)
-2. Click **"New"** → **"PostgreSQL"**
-3. Configure:
-   - **Name**: `taskforge-db`
-   - **Database**: `taskforge`
-   - **User**: Leave as default
-   - **Region**: Choose the same region you used for Level 1's backend
-   - **Plan**: Free
+> **Why Supabase?** You get 2 free PostgreSQL databases (500MB each). If you plan to build all 5 projects in this curriculum, Supabase gives you the most room. Plus, it has a beautiful dashboard for viewing your data.
 
-4. Click **"Create Database"**
-
-Render will provision the database. This takes a minute or two. When it's ready, you'll see two important URLs:
-
-- **Internal Database URL** — Used by your Render web service (faster, same network)
-- **External Database URL** — Used from your local machine or other services
-
-**Copy both URLs and save them somewhere.** You'll need them.
-
-### Run the Schema on the Production Database
-
-You need to create the tables in the production database. Use the **External** URL:
+1. Go to [supabase.com](https://supabase.com) and sign up
+2. Click **New Project**
+3. Name it `taskforge`, choose a strong database password, select a region close to you
+4. Wait for the project to provision (1-2 minutes)
+5. Go to **Project Settings** → **Database** → **Connection string** → **URI**
+6. Copy the connection string — it looks like: `postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
+7. Run the schema:
 
 ```bash
-psql "your-external-database-url" < server/src/db/schema.sql
+psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
 ```
 
-Replace `your-external-database-url` with the External Database URL from Render. It looks something like:
-
-```
-postgresql://user:password@host.oregon-postgres.render.com/taskforge
-```
-
-> [!WARNING]
-> **The External Database URL contains your password.** Do not commit it to Git, share it in Slack, or paste it in browser URL bars. Treat it like a secret.
-
-You should see:
-
-```
-DROP TABLE
-DROP TABLE
-CREATE TABLE
-CREATE TABLE
+Verify:
+```bash
+psql "YOUR_SUPABASE_CONNECTION_STRING" -c "\dt"
 ```
 
-Your production database now has the `projects` and `tasks` tables.
+You should see `projects` and `tasks` tables.
+
+### Option B: Neon
+
+1. Go to [neon.tech](https://neon.tech) and sign up
+2. Create a project named `taskforge`
+3. Copy the connection string from the dashboard
+4. Run the schema: `psql "YOUR_NEON_CONNECTION_STRING" < server/src/db/schema.sql`
+
+### Option C: Render PostgreSQL
+
+> ⚠️ **Limitation:** Render only allows **1 free PostgreSQL database** per account, and it **expires after 90 days**. If you plan to do all 5 levels, you'll run out. Consider Supabase or Neon instead.
+
+1. Go to [render.com](https://render.com) → **New** → **PostgreSQL**
+2. Name: `taskforge-db`
+3. Database: `taskforge`
+4. Select the free plan
+5. Note the **Internal Database URL** (for backend) and **External Database URL** (for running schema)
+6. Run the schema: `psql "EXTERNAL_URL" < server/src/db/schema.sql`
 
 ---
 
-## Step 4: Deploy the Backend (Render Web Service)
+## 4. Deploy the Backend
 
-1. In Render, click **"New"** → **"Web Service"**
-2. Connect your `task-forge` GitHub repository
-3. Configure:
-   - **Name**: `task-forge-api`
-   - **Root Directory**: `server`
-   - **Runtime**: Node
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
+### On Render
 
-4. **Add environment variables:**
+1. **New** → **Web Service** → connect your GitHub repo
+2. Configure:
 
-| Key | Value |
-|-----|-------|
-| `DATABASE_URL` | (paste the **Internal** Database URL from Render) |
-| `CORS_ORIGIN` | `https://task-forge-xxxxx.vercel.app` (you'll get this from Vercel next) |
+| Setting | Value |
+|---------|-------|
+| **Name** | `task-forge-api` |
+| **Root Directory** | `server` |
+| **Runtime** | Node |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm start` |
+
+3. Add environment variables:
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | Your database connection string (Internal URL if Render DB, full URL if Supabase/Neon) |
+| `CORS_ORIGIN` | `https://task-forge.vercel.app` (fill after frontend deploy) |
 | `NODE_ENV` | `production` |
 
-> [!NOTE]
-> Use the **Internal** Database URL here (not External). Internal URLs are faster because the web service and database are on the same network inside Render.
-
-5. Click **"Create Web Service"**
-
-Render will build and deploy your backend. Watch the logs for:
-
-```
-Connected to PostgreSQL
-Server running on http://localhost:10000
-```
-
-(Render assigns its own PORT automatically.)
-
-### Verify the Backend
-
-Once deployed, visit your backend health check:
-
-```
-https://task-forge-api.onrender.com/api/health
-```
+4. Deploy and verify: `https://task-forge-api.onrender.com/api/health`
 
 Expected: `{"status":"ok","database":"connected",...}`
 
-If `database` shows `"disconnected"`, check your `DATABASE_URL` environment variable on Render.
+### On Railway (Alternative)
+
+1. New Project → Deploy from GitHub
+2. Root Directory: `server`
+3. Build: `npm install && npm run build`
+4. Start: `npm start`
+5. Set the same environment variables
 
 ---
 
-## Step 5: Deploy the Frontend (Vercel)
+## 5. Deploy the Frontend
 
-Same process as Level 1:
+### On Vercel
 
-1. Go to [vercel.com](https://vercel.com) and log in
-2. Click **"Add New"** → **"Project"**
-3. Import your `task-forge` repository
-4. Configure:
-   - **Framework Preset**: Vite
-   - **Root Directory**: `client`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
+1. Import your repo
+2. Configure:
 
-5. **Add environment variables:**
+| Setting | Value |
+|---------|-------|
+| **Framework** | Vite |
+| **Root Directory** | `client` |
+| **Build Command** | `npm run build` |
+| **Output Directory** | `dist` |
 
-| Key | Value |
-|-----|-------|
-| `VITE_API_URL` | `https://task-forge-api.onrender.com/api` |
+3. Add environment variable:
+   - `VITE_API_URL` = `https://task-forge-api.onrender.com/api`
 
-6. Click **"Deploy"**
+> ⚠️ **No trailing slash!** Use `.../api` not `.../api/`
 
-### Update Render CORS
-
-Now that you have the Vercel URL, go back to Render:
-
-1. Navigate to your `task-forge-api` web service
-2. Go to **Environment** → edit `CORS_ORIGIN`
-3. Set it to your Vercel URL: `https://task-forge-xxxxx.vercel.app`
-4. Click **"Save Changes"**
-
-Render will automatically redeploy with the new environment variable.
+4. Deploy
 
 ---
 
-## Step 6: Verify Production
+## 6. Update CORS
 
-Visit your Vercel URL in a browser. Test the full cycle:
-
-1. Create a project → appears in the list
-2. Click into the project → add tasks
-3. Toggle tasks, edit titles, delete tasks
-4. **Refresh the page** → data is still there (database persistence)
-5. **Close the browser, open a new one, go to the URL** → data is still there
-6. **Try from a different device (phone)** → same data (it's in the cloud)
-
-This is the full three-tier application running in production.
-
----
-
-## Deployed Architecture
+After getting your Vercel URL, go back to your backend hosting and set:
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                  DEPLOYED ARCHITECTURE                                 │
-│                                                                      │
-│  User's Browser                                                       │
-│  ┌──────────────────────────┐                                        │
-│  │  URL: task-forge.vercel.app                                       │
-│  └──────────────┬───────────┘                                        │
-│                 │                                                     │
-│                 │ HTTPS                                                │
-│                 ▼                                                     │
-│  ┌──────────────────────────┐    Serves static files (HTML, JS, CSS) │
-│  │      Vercel CDN          │    from client/dist/                     │
-│  │   (Frontend Host)         │    No server code runs here             │
-│  └──────────────────────────┘                                        │
-│                 │                                                     │
-│                 │ fetch() calls to task-forge-api.onrender.com/api    │
-│                 │                                                     │
-│                 │ HTTPS                                                │
-│                 ▼                                                     │
-│  ┌──────────────────────────┐    Runs Node.js + Express              │
-│  │   Render Web Service     │    Processes API requests               │
-│  │   (Backend Host)          │    Sends SQL queries                    │
-│  └──────────────┬───────────┘                                        │
-│                 │                                                     │
-│                 │ Internal Database URL (same network)                │
-│                 │                                                     │
-│                 │ SQL                                                  │
-│                 ▼                                                     │
-│  ┌──────────────────────────┐    Stores data permanently on disk     │
-│  │  Render PostgreSQL       │    Runs 24/7                            │
-│  │   (Database Host)         │    Managed by Render (backups, etc.)   │
-│  └──────────────────────────┘                                        │
-│                                                                      │
-│  All three auto-deploy when you push to GitHub.                      │
-│  (Database persists independently — pushing code doesn't erase data) │
-└──────────────────────────────────────────────────────────────────────┘
+CORS_ORIGIN=https://task-forge.vercel.app
+```
+
+> ⚠️ **Common Mistake: Trailing Slash in CORS Origin**
+> Wrong: `https://task-forge.vercel.app/`
+> Right: `https://task-forge.vercel.app`
+>
+> The error message will say: `The 'Access-Control-Allow-Origin' header has a value '...' that is not equal to the supplied origin`. This means there's a trailing slash mismatch.
+
+---
+
+## 7. Verify Production
+
+Open your Vercel URL and test:
+
+1. Create a project
+2. Add tasks
+3. Toggle task completion
+4. Edit a task (double-click)
+5. Delete a task
+6. Refresh the page — **data should persist!**
+7. Delete the project — tasks should cascade delete
+
+### Troubleshooting
+
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| CORS error | Trailing slash in CORS_ORIGIN, or not set | Remove trailing slash, check env var |
+| "Failed to fetch" | Wrong VITE_API_URL, or backend down | Check URL, check backend logs |
+| Backend 503 | TypeScript build failed | Check build logs for TS errors |
+| `TS7016: Could not find declaration file` | @types in devDependencies | Move to dependencies: `npm uninstall @types/... && npm install @types/...` |
+| `Cannot find name 'process'` | Missing `"types": ["node"]` in tsconfig | Add it to `compilerOptions` |
+| Database "disconnected" | Wrong DATABASE_URL | Check connection string, check DB is running |
+| Data not persisting | Using wrong database or in-memory fallback | Verify DATABASE_URL points to production DB |
+
+---
+
+## 8. Deployment Architecture
+
+```
+User's Browser
+      │
+      │ HTTPS
+      ▼
+┌──────────────┐
+│    Vercel     │  Serves static files (HTML, JS, CSS)
+│    (CDN)      │  Built from client/ with Vite
+└──────┬───────┘
+       │
+       │ HTTPS (fetch API calls)
+       ▼
+┌──────────────┐
+│   Render /    │  Runs Express server (compiled JS)
+│   Railway     │  Handles API requests, validation
+└──────┬───────┘
+       │
+       │ PostgreSQL protocol (encrypted)
+       ▼
+┌──────────────┐
+│  Supabase /   │  Stores data permanently
+│  Neon /       │  Runs SQL queries
+│  Render DB    │
+└──────────────┘
 ```
 
 ---
 
-## Production Troubleshooting
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| Frontend blank page | Build failed | Check Vercel build logs |
-| Backend 502 error | Backend crashed | Check Render logs for errors |
-| CORS error in browser | Origin mismatch | Verify `CORS_ORIGIN` on Render matches Vercel URL exactly |
-| `database: "disconnected"` in health check | Wrong DATABASE_URL | Verify DATABASE_URL on Render (use Internal URL) |
-| Data missing after deploy | You re-ran schema.sql on production | Schema drops tables first — only run it once (or when you want to reset) |
-| API returns 404 | Wrong VITE_API_URL | Check Vercel env var includes `/api` at the end |
-| "relation does not exist" | Forgot to run schema on production DB | Run `psql "external-url" < server/src/db/schema.sql` |
-| Tasks not showing | Frontend fetching from wrong URL | Check Network tab in DevTools for the request URL |
-| Render free tier slow first load | Cold start (free tier spins down) | Wait ~30 seconds, refresh — subsequent loads are fast |
-
----
-
-## Step 7: Update README and Push
-
-> [!IMPORTANT]
-> **You should be in:** `task-forge/` (the project root)
-
-Update `task-forge/README.md` with your live URLs (replace the placeholder URLs with your actual deployment URLs).
+## 9. Commit
 
 ```bash
 git add .
-git commit -m "docs: add deployment configuration and live URLs"
-git push
+git commit -m "feat: deploy TaskForge to production"
 ```
 
-Both Vercel and Render will automatically redeploy from this push.
-
 ---
 
-## What's Different From Level 1 Deployment
+## 🧠 Spatial Check-In
 
-| | Level 1 | Level 2 |
-|---|---------|---------|
-| **Tiers deployed** | 2 (frontend + backend) | 3 (frontend + backend + database) |
-| **Data on restart** | Lost | Persists |
-| **Database** | None | Render PostgreSQL |
-| **Env vars** | PORT, CORS_ORIGIN | PORT, CORS_ORIGIN, DATABASE_URL |
-| **Schema setup** | None | Must run schema.sql on production DB |
-| **Backend health** | `{ status: 'ok' }` | `{ status: 'ok', database: 'connected' }` |
+1. Why are the database, backend, and frontend deployed as three separate services instead of one?
 
----
+2. If you see `Cannot find name 'console'` in the Render build logs, what two things should you check?
 
-> [!TIP]
-> ## Spatial Check-In
+3. Why do we set `CORS_ORIGIN` as an environment variable instead of hardcoding it?
 
-1. **Why do we use the Internal Database URL on Render instead of the External one?**
+<details>
+<summary>Check Your Answers</summary>
 
-<details><summary>Answer</summary>
+1. **Separation of concerns and scalability.** Each tier has different needs: the frontend needs a CDN for fast global delivery, the backend needs a Node.js runtime, and the database needs persistent storage and indexing. Separate services also mean you can scale them independently (e.g., add more backend instances without changing the database).
 
-The Internal URL routes traffic through Render's private network, which is faster and more secure. The External URL goes over the public internet and is only needed when connecting from outside Render (like your local machine).
+2. **(a)** Check that `tsconfig.json` has `"types": ["node"]`. **(b)** Check that `@types/node` is in `dependencies`, not `devDependencies`.
 
-</details>
-
-2. **What happens to data when you push new code to GitHub?**
-
-<details><summary>Answer</summary>
-
-Vercel rebuilds the frontend and Render rebuilds the backend, but the database is unaffected. Data persists across deployments because the database is a separate, independent service.
-
-</details>
-
-3. **Why is it dangerous to re-run schema.sql on the production database?**
-
-<details><summary>Answer</summary>
-
-The schema file starts with `DROP TABLE IF EXISTS` — it deletes all existing data before recreating the tables. In production, this would destroy all user data.
+3. **Different environments need different values.** In development, the origin is `http://localhost:5173`. In production, it's `https://task-forge.vercel.app`. Environment variables let you change this without changing code.
 
 </details>
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 05 — Building the Frontend](../05-frontend/) | [Level 2 Overview](../) | [07 — Growth Review →](../07-growth/) |
+> **Session Break** — Three-tier deployment complete!
+> When you return, you'll review your skills in [Step 7 — Growth Review](../07-growth/).
+
+---
+
+| | |
+|:---|---:|
+| [← Step 5: Frontend](../05-frontend/) | [Step 7 — Growth Review →](../07-growth/) |

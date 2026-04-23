@@ -226,6 +226,9 @@ You've completed the Spatial Learning curriculum. You know how to build, test, d
 - [ ] GitHub repository is public with a clear README
 - [ ] CI pipeline passes on GitHub Actions (green check)
 - [ ] Sentry project exists and is connected (even if no errors yet)
+- [ ] `server/package.json` has `@types/node`, `@types/express`, `@types/cors`, `@types/pg`, `@types/bcryptjs`, `@types/jsonwebtoken` in `dependencies` (not devDependencies)
+- [ ] `server/tsconfig.json` has `"types": ["node"]` in compilerOptions
+- [ ] No CORS errors (no trailing slash in CORS_ORIGIN)
 - [ ] You can explain the full auth → authorization → data chain
 - [ ] You can explain many-to-many relationships and why junction tables exist
 - [ ] You can explain database transactions and when they're needed

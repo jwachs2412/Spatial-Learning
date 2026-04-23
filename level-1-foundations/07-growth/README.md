@@ -1,193 +1,159 @@
-`Level 1` **Step 7 of 7** — Growth Review
-
-# 07 — Growth Review: What You Learned and How to Talk About It
+# Step 7 — Growth Review: What You Learned and How to Talk About It
 
 ## What You Just Built
 
-You built **DevPulse** — a full-stack web application with:
-- A React + TypeScript frontend
-- A Node.js + Express backend
-- A REST API connecting them
-- Deployed to the public internet
+DevPulse is a full-stack web application with:
+- A **React + TypeScript frontend** that collects and displays mood data
+- A **Node.js + Express backend** with a validated REST API
+- **Deployment** to production with Vercel and Render/Railway
+- **CORS configuration** for cross-origin communication
 
-This is not a tutorial project that lives on your computer. It's a deployed application with a public URL.
-
----
-
-## Skills This App Demonstrates to Employers
-
-### 1. Client-Server Architecture
-You understand that web applications have two halves — a frontend that runs in the browser and a backend that runs on a server — and they communicate through HTTP.
-
-**How to say it in an interview:**
-> "I built DevPulse as a decoupled frontend-backend application. The React frontend communicates with the Express backend through a REST API. I understand the client-server model and how HTTP requests flow between them."
-
-### 2. React Component Design
-You can break a UI into logical components, manage state with hooks, and pass data between components through props.
-
-**How to say it:**
-> "I structured the React frontend with separate components for the form, list, and chart. State is managed at the App level and passed down through props. I use TypeScript interfaces to ensure type safety across the component tree."
-
-### 3. TypeScript Proficiency
-You use TypeScript to catch errors at compile time, define clear data contracts, and write self-documenting code.
-
-**How to say it:**
-> "I used TypeScript throughout the project — both frontend and backend — to define interfaces for data models and ensure type safety across the full stack. Shared type definitions create a contract between the frontend and the API."
-
-### 4. REST API Design
-You can design API endpoints that follow RESTful conventions, validate input, and return appropriate status codes.
-
-**How to say it:**
-> "The backend exposes a RESTful API with GET and POST endpoints. The POST endpoint validates incoming data before storing it and returns appropriate HTTP status codes — 201 for successful creation and 400 for invalid input."
-
-### 5. Git Version Control
-You use Git to track changes with meaningful commit messages following conventional commit standards.
-
-**How to say it:**
-> "I use Git for version control with conventional commits. My commit history tells the story of how the application was built incrementally."
-
-### 6. Deployment
-You can deploy a frontend and backend to separate hosting platforms and configure them to communicate in production.
-
-**How to say it:**
-> "The frontend is deployed on Vercel and the backend on Render. I configured CORS to allow cross-origin requests between the two services, managed environment variables for different environments, and understand the difference between development and production deployments."
+This is not a tutorial project — it's a working application you built yourself, deployed to the internet, and can demonstrate to anyone.
 
 ---
 
-## Architectural Understanding Gained
+## Skills Demonstrated to Employers
 
-### Layer Model
-
-You now understand the three-layer model of a web application:
-
-```
-┌─────────────────────────────────────┐
-│  PRESENTATION LAYER (Frontend)       │
-│  React components, state, UI logic  │
-│  Runs in the browser                │
-├─────────────────────────────────────┤
-│  APPLICATION LAYER (Backend)         │
-│  Express routes, validation, logic  │
-│  Runs on the server                 │
-├─────────────────────────────────────┤
-│  DATA LAYER (Storage)               │
-│  In-memory array (for now)          │
-│  Level 2 introduces a real database │
-└─────────────────────────────────────┘
-```
-
-### Request Lifecycle
-
-You can trace a user action from button click to database and back:
-
-```
-User clicks → React state → fetch() → HTTP → Express → Validate → Store → Response → State update → Re-render
-```
-
-### Separation of Concerns
-
-You understand why frontend and backend are separate:
-- Different runtimes (browser vs Node.js)
-- Different security models (browser is untrusted)
-- Different deployment targets
-- Independent scaling
-- Team specialization
+| Skill | What You Did | Why It Matters |
+|-------|-------------|----------------|
+| **React Components** | Built EntryForm, EntryList, MoodChart as reusable components | Shows you understand component architecture, not just one big file |
+| **TypeScript** | Used interfaces, union types, Omit, generics for type safety | Catches bugs at compile time — employers prefer TypeScript over raw JavaScript |
+| **REST API Design** | Created GET and POST endpoints following REST conventions | Shows you understand API design, not just endpoint creation |
+| **Server-Side Validation** | Validated all input data on the backend | Shows security awareness — never trust the client |
+| **State Management** | Used useState, useEffect, lifted state up | Shows you understand React's data flow |
+| **Deployment** | Deployed frontend and backend to separate platforms | Shows you can ship code, not just write it |
 
 ---
 
-## What's Still Missing (and Why)
+## Architectural Understanding
 
-Be honest about what this app doesn't do. In an interview, acknowledging limitations shows maturity:
+You should be able to draw this diagram from memory:
 
-| Missing Feature | Why It's Missing | When It's Introduced |
+```
+┌──────────────┐     HTTP      ┌──────────────┐
+│   Browser    │──────────────▶│   Server     │
+│              │               │              │
+│   React      │◀──────────────│   Express    │
+│   Components │    JSON       │   Routes     │
+│   useState   │               │   Validation │
+│   useEffect  │               │   In-memory  │
+│              │               │   data store │
+│   Vercel     │               │   Render     │
+└──────────────┘               └──────────────┘
+```
+
+### Complete Request Lifecycle
+
+When a user submits a mood entry, here's what happens:
+
+```
+1. User clicks "Log Entry"
+2. React calls handleSubmit() in App.tsx
+3. handleSubmit() calls createEntry() in api.ts
+4. fetch() sends POST request to the backend URL
+   - Method: POST
+   - Headers: Content-Type: application/json
+   - Body: { mood, energy, note, date }
+5. Request travels over HTTPS to Render/Railway
+6. Express receives the request
+7. express.json() middleware parses the body
+8. CORS middleware checks the origin
+9. Route handler validates the data
+10. Handler creates a MoodEntry with id and createdAt
+11. Handler pushes to the in-memory array
+12. Handler responds with 201 and the entry as JSON
+13. Response travels back over HTTPS
+14. fetch() resolves the Promise
+15. api.ts parses the JSON response
+16. handleSubmit() receives the MoodEntry
+17. setEntries() adds it to the front of the state array
+18. React re-renders EntryList and MoodChart
+19. User sees the new entry on screen
+```
+
+---
+
+## What's Missing (and Why It's Missing)
+
+These are intentionally excluded — each becomes a focus of future levels:
+
+| Missing Feature | Why It's Missing | When You'll Learn It |
 |----------------|-----------------|---------------------|
-| **Database** | We focused on understanding the client-server split first | Level 2 |
-| **Data persistence** | In-memory storage was intentional — shows the need for databases | Level 2 |
-| **User authentication** | Need to understand CRUD before adding auth | Level 3 |
-| **Error handling (advanced)** | Basic validation is in place; middleware patterns come later | Level 4 |
-| **Tests** | Testing is a discipline that builds on stable architecture | Level 4 |
-
-**How to say it:**
-> "DevPulse uses in-memory storage intentionally — it's a Level 1 project focused on client-server architecture. In my next project, TaskForge, I added PostgreSQL for persistent data storage and full CRUD operations."
+| **Database** | We focused on client-server communication first | Level 2 — PostgreSQL |
+| **User accounts** | Authentication adds security complexity | Level 3 — JWT + bcrypt |
+| **State management library** | useState is sufficient for this scale | Level 4 — Redux Toolkit |
+| **Tests** | We focused on building first, testing comes later | Level 4 — Vitest |
+| **CI/CD** | Manual deployment teaches you what automation replaces | Level 5 — GitHub Actions |
+| **Error monitoring** | Need production traffic to make monitoring meaningful | Level 5 — Sentry |
 
 ---
 
 ## How to Present This Project
 
-### On Your GitHub Profile
-- Clean README with clear description, tech stack, features, and setup instructions
-- Deployed URLs that work (check them periodically)
-- Commit history that shows incremental progress
+### Resume Bullet Points
 
-### On Your Resume/Portfolio
 ```
 DevPulse — Developer Mood Tracker
-React, TypeScript, Node.js, Express, REST API
-• Built a full-stack mood tracking application with React frontend and Express backend
-• Designed RESTful API with input validation and proper HTTP status codes
-• Deployed frontend (Vercel) and backend (Render) with CORS configuration
-• Live: [URL] | Code: [GitHub URL]
+- Built full-stack web app with React/TypeScript frontend and Express/Node.js backend
+- Designed REST API with server-side validation and proper HTTP status codes
+- Deployed frontend to Vercel CDN and backend to Render with CORS configuration
+- Implemented component architecture with lifted state and service layer patterns
 ```
 
-### In an Interview
-Be ready to answer:
+### Interview Talking Points
 
-1. **"Walk me through the architecture."**
-   → Draw the two boxes (frontend, backend), the HTTP arrow between them, explain what runs where.
+**"Tell me about a project you've built."**
+> "DevPulse is a developer mood tracker. I built it to learn full-stack architecture — the frontend is React with TypeScript, and the backend is Express with a REST API. What I found most interesting was understanding the client-server split: why the browser and server are separate, how CORS works, and what happens when you deploy to different platforms."
 
-2. **"How does data flow from the form to the server?"**
-   → Trace it: form state → onSubmit → fetch POST → Express route → validation → storage → 201 response → setState → re-render.
+**"How does data flow in your application?"**
+> "The user submits a form → React calls a service function → fetch sends a POST request to the Express backend → the backend validates the data, creates an entry, and returns it as JSON → the frontend adds the new entry to state → React re-renders the components. In development, this happens on localhost over different ports. In production, it's HTTPS between Vercel and Render."
 
-3. **"Why separate frontend and backend?"**
-   → Different runtimes, different security models, independent deployment, separation of concerns.
-
-4. **"What would you add next?"**
-   → "A database for persistence, user authentication, and comprehensive error handling."
-
-5. **"What was the hardest part?"**
-   → Be honest. Common answers: understanding CORS, getting the TypeScript configuration right, connecting the frontend to the backend for the first time.
+**"What would you improve?"**
+> "The biggest limitation is in-memory storage — data disappears when the server restarts. In Level 2 of this curriculum, I added PostgreSQL for persistence. I'd also add user authentication so each developer has their own mood history, and automated tests to catch regressions."
 
 ---
 
-## What Comes Next
+## Level 2 Preview
 
-Level 2 introduces the **data layer** — the missing piece:
+In Level 2, you'll build **TaskForge** — a project task manager with:
+- **PostgreSQL database** for persistent storage
+- **Full CRUD** (Create, Read, Update, Delete)
+- **Database schema design** with relationships (projects → tasks)
+- **SQL queries** with parameterized inputs (preventing SQL injection)
+- **Three-tier architecture** (frontend → backend → database)
+
+Everything you learned in Level 1 carries forward. Level 2 adds a data layer beneath the backend.
 
 ```
-Level 1: Frontend ↔ Backend ↔ [Memory]     ← You are here
-Level 2: Frontend ↔ Backend ↔ [Database]    ← Next
+LEVEL 1                          LEVEL 2
+┌──────────┐ ┌──────────┐      ┌──────────┐ ┌──────────┐ ┌──────────┐
+│ Frontend │ │ Backend  │      │ Frontend │ │ Backend  │ │ Database │
+│ (React)  │→│ (Express)│      │ (React)  │→│ (Express)│→│ (Postgres)│
+└──────────┘ └──────────┘      └──────────┘ └──────────┘ └──────────┘
+    2 tiers                         3 tiers
+    In-memory data                  Persistent data
 ```
-
-You'll build **TaskForge**, a project task manager with:
-- PostgreSQL database
-- Full CRUD operations (Create, Read, Update, Delete)
-- Environment variable management
-- Database deployment
-- More sophisticated API design
-
-Everything you learned in Level 1 carries forward. You already know how to build a frontend, build a backend, and connect them. Level 2 adds persistence and more complex data operations.
 
 ---
 
-## Level 1 Completion Checklist
+## Completion Checklist
 
-Before moving to Level 2, verify:
+Before starting Level 2, verify:
 
-- [ ] DevPulse is deployed and accessible at a public URL
-- [ ] GitHub repository is public with a clear README
-- [ ] You can explain client-server architecture to someone else
-- [ ] You can trace a request from button click to server response and back
-- [ ] You understand what CORS is and why it exists
-- [ ] You understand what "building" an app means (TypeScript → JavaScript, bundling)
-- [ ] You know the difference between dev and production environments
-- [ ] You can explain REST API conventions (methods, URLs, status codes)
-- [ ] You understand React state, props, and component structure
-- [ ] You can explain why the frontend and backend are separate projects
+- [ ] DevPulse is deployed and working at your Vercel URL
+- [ ] You can create mood entries from the production URL
+- [ ] Your code is pushed to GitHub
+- [ ] You can explain the client-server model without notes
+- [ ] You can trace a request from button click to screen update
+- [ ] You understand why CORS exists and how to fix CORS errors
+- [ ] You know the difference between development and production environments
+- [ ] Your `server/tsconfig.json` includes `"types": ["node"]`
+- [ ] Your `server/package.json` has @types packages in `dependencies` (not `devDependencies`)
 
-All checked? You're ready for Level 2.
+All checked? You're ready for [Level 2 — TaskForge](../../level-2-crud/).
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 06 — Deployment](../06-deployment/) | [Level 1 Overview](../) | [Level 2 — TaskForge →](../../level-2-crud/) |
+| | |
+|:---|---:|
+| [← Step 6: Deployment](../06-deployment/) | [Level 2 — TaskForge →](../../level-2-crud/) |

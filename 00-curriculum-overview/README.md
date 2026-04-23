@@ -338,6 +338,56 @@ This is your portfolio capstone. It demonstrates that you can build a complex, m
 
 ---
 
+## Deployment Platforms
+
+Throughout this curriculum, you'll deploy real applications. Here are the platforms we use and why:
+
+### Frontend Hosting
+- **Vercel** (recommended) — Zero-config for React/Vite apps, instant deployments, unlimited free projects
+- **Netlify** — Excellent alternative with similar features
+
+### Backend Hosting
+- **Render** — Good free tier, auto-deploys from GitHub. Free tier has cold starts (30-60s on first request after inactivity)
+- **Railway** (railway.app) — No cold starts, easy environment variables, PostgreSQL included. $5/month free credit
+- **Fly.io** — Global edge deployment, free tier available
+
+### Database Hosting (Level 2+)
+
+> ⚠️ **Important: Plan Ahead for Multiple Projects**
+> If you want all 5 projects deployed simultaneously for your portfolio, you need to spread your databases across providers. Render only allows **1 free PostgreSQL database** per account (expires after 90 days).
+
+- **Supabase** (supabase.com) — **Recommended for this curriculum.** 2 free projects with 500MB each. Built-in dashboard for viewing your data. Easy connection strings.
+- **Neon** (neon.tech) — Serverless PostgreSQL, generous free tier, database branching for dev/prod environments.
+- **Render** — Simple but limited: 1 free database, 90-day expiration.
+- **Railway** — PostgreSQL included with backend hosting, $5/month free credit.
+
+**Portfolio Strategy** — To keep all projects live:
+| Project | Database Provider | Backend | Frontend |
+|---------|------------------|---------|----------|
+| Level 1 (DevPulse) | None needed | Render | Vercel |
+| Level 2 (TaskForge) | Supabase | Render | Vercel |
+| Level 3 (VaultNote) | Supabase | Render | Vercel |
+| Level 4 (DataDash) | Neon | Render | Vercel |
+| Level 5 (CollabBoard) | Neon | Render | Vercel |
+
+---
+
+## How This Curriculum Teaches
+
+This is not a copy/paste tutorial. Each lesson follows this pattern:
+
+1. **Concept First** — Every new idea is defined and explained with real-world analogies *before* you see any code
+2. **Why Before What** — You'll understand the problem before seeing the solution
+3. **Build It Yourself** — You'll be challenged to write code *before* seeing the answer (solutions are in expandable sections)
+4. **Line-by-Line Breakdowns** — Important code blocks are explained line by line
+5. **Common Mistakes** — Warnings about errors you're likely to hit, with fixes
+6. **Checkpoints** — Verification steps so you know your code works before moving on
+7. **Debugging Exercises** — "What would happen if..." scenarios that build problem-solving skills
+
+You will get stuck. That's by design. Getting stuck and working through it is how you learn to debug — the most important skill in software engineering.
+
+---
+
 ## Progression Summary
 
 ```

@@ -361,11 +361,8 @@ Line-by-line:
 >
 > **Plain English:** Structured logs are like spreadsheets — you can sort and filter by any column. `console.log` is like a notebook — you can only read it top to bottom.
 
-Install pino-pretty for development:
-
-```bash
-npm install -D pino-pretty
-```
+> [!NOTE]
+> **pino-pretty** was already installed as a dev dependency in the project setup step.
 
 ### Rate Limiter Middleware
 

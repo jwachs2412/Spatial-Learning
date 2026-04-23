@@ -127,29 +127,59 @@ If both jobs pass, you'll see green checkmarks. If either fails, check the logs 
 
 ---
 
-## Step 4: Deploy the Database (Render PostgreSQL)
+## Step 4: Deploy the Database
+
+> [!WARNING]
+> **Render's free PostgreSQL has a 90-day expiration and only 1 free database per account.** If you already used it for Level 2, 3, or 4, choose Supabase or Neon instead.
+
+### Option A: Neon (Recommended for Level 5)
+
+1. Go to [neon.tech](https://neon.tech) → **Create Project**: `collabboard`
+2. Copy the connection string
+3. Run schema and seed:
+
+```bash
+psql "YOUR_NEON_CONNECTION_STRING" < server/src/db/schema.sql
+DATABASE_URL="YOUR_NEON_CONNECTION_STRING" npx tsx server/src/db/seed.ts
+```
+
+### Option B: Supabase
+
+1. Go to [supabase.com](https://supabase.com) → **New Project**
+2. Name: `collabboard`, set a database password, choose a region
+3. Go to **Project Settings** → **Database** → **Connection string** → **URI**
+4. Run schema and seed:
+
+```bash
+psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
+DATABASE_URL="YOUR_SUPABASE_CONNECTION_STRING" npx tsx server/src/db/seed.ts
+```
+
+### Option C: Render PostgreSQL
+
+> Only use if you haven't used your free Render database for a previous level.
 
 1. Go to [render.com](https://render.com) → **"New"** → **"PostgreSQL"**
-2. Configure:
-   - **Name**: `collabboard-db`
-   - **Database**: `collabboard`
-   - **Region**: Same as previous projects
-   - **Plan**: Free
-
-3. Click **"Create Database"**
-4. Copy both the **Internal** and **External** Database URLs
-
-### Run Schema on Production
+2. Configure: Name: `collabboard-db`, Database: `collabboard`, Plan: Free
+3. Copy both the **Internal** and **External** Database URLs
+4. Run schema and seed using the **External** URL:
 
 ```bash
 psql "YOUR_EXTERNAL_DATABASE_URL" < server/src/db/schema.sql
-```
-
-### Seed Production Data
-
-```bash
 DATABASE_URL="YOUR_EXTERNAL_DATABASE_URL" npx tsx server/src/db/seed.ts
 ```
+
+> [!WARNING]
+> **Use the External URL** for the seed command — you're connecting from your local machine. The Internal URL only works between Render services.
+
+### Portfolio Strategy
+
+| Level | Database Provider | Reason |
+|-------|------------------|--------|
+| Level 2 — TaskForge | Supabase | 2 free projects |
+| Level 3 — VaultNote | Neon | Free serverless PostgreSQL |
+| Level 4 — DataDash | Supabase (2nd project) | Or Render if unused |
+| Level 5 — CollabBoard | Neon (2nd project) | Or Render if unused |
 
 Expected: 3 users, 2 boards, 7 lists, 12 cards, 5 comments created.
 
@@ -234,6 +264,16 @@ Go back to Render → your web service → Environment:
 - Set `CORS_ORIGIN` to your Vercel URL: `https://collab-board-xxxxx.vercel.app`
 - Save → Render redeploys automatically
 
+> [!WARNING]
+> **No trailing slash in CORS_ORIGIN!** This is the #1 production deployment bug.
+>
+> ```
+> ✗ CORS_ORIGIN=https://collab-board.vercel.app/    ← WRONG (trailing slash)
+> ✓ CORS_ORIGIN=https://collab-board.vercel.app      ← CORRECT (no trailing slash)
+> ```
+>
+> The browser sends `Origin: https://collab-board.vercel.app` (no slash). If your CORS_ORIGIN has a trailing slash, they don't match, and every request fails with `Access-Control-Allow-Origin` errors.
+
 ---
 
 ## Step 7: Verify Production
@@ -271,7 +311,9 @@ Visit your Vercel URL:
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | "No token provided" | Frontend not sending Authorization header | Check api.ts authHeaders() |
-| CORS error | Origin mismatch | Verify CORS_ORIGIN matches Vercel URL exactly |
+| CORS error | Trailing slash in CORS_ORIGIN | Remove the trailing slash from CORS_ORIGIN |
+| `TS2580: Cannot find name 'process'` | Missing `"types": ["node"]` in tsconfig | Add `"types": ["node"]` to `compilerOptions` in `server/tsconfig.json` |
+| `TS7016: Could not find declaration file` | @types in devDependencies | Move `@types/node`, `@types/express`, `@types/cors`, `@types/pg`, `@types/bcryptjs`, `@types/jsonwebtoken` to regular `dependencies` |
 | Cards don't load on board | Backend JOINs failing | Check Render logs for SQL errors |
 | Drag doesn't persist | moveCard API failing silently | Check network tab for 4xx/5xx responses |
 | CI fails but local passes | Env difference | Check GitHub Actions logs, verify DATABASE_URL in workflow |

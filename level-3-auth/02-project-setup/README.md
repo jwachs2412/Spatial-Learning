@@ -1,165 +1,95 @@
-`Level 3` **Step 2 of 8** — Project Setup
-
-# 02 — Project Setup: Scaffolding with Authentication
+# Step 2 — Project Setup: Scaffolding with Authentication
 
 ## Spatial Orientation
 
-Same two-project structure as Levels 1 and 2, with new dependencies for authentication:
-
 ```
-vault-note/              ← The project root
-├── client/              ← Frontend (React + TypeScript + Vite + React Router)
-├── server/              ← Backend (Node + Express + TypeScript + pg + bcrypt + jsonwebtoken)
-│   └── .env             ← DATABASE_URL + JWT_SECRET (NEVER committed)
-└── PostgreSQL           ← Running as a service on your machine (port 5432)
+vault-note/
+├── client/         ← React + React Router + TypeScript
+├── server/         ← Express + TypeScript + bcrypt + JWT
+│   └── .env        ← Database URL + JWT_SECRET
+├── .gitignore
+└── README.md
 ```
-
-**What's new in the stack?**
-- `bcrypt` — password hashing
-- `jsonwebtoken` — JWT creation and verification
-- `react-router-dom` — client-side routing (multiple pages without full reload)
 
 ---
 
-## Step 1: Create the Project Folder
-
-Open your terminal. Navigate to your projects folder.
+## 1. Create the Project
 
 ```bash
-mkdir vault-note
-cd vault-note
-```
-
-## Step 2: Initialize Git
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
-
-```bash
+mkdir vault-note && cd vault-note
 git init
 ```
 
-## Step 3: Create the .gitignore
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
-
-```bash
-touch .gitignore
-```
-
-Open `.gitignore` and add:
+Create `.gitignore`:
 
 ```gitignore
-# Dependencies
 node_modules/
-
-# Environment variables — NEVER commit these
 .env
 .env.local
 .env.production
-
-# Build output
 dist/
 build/
-
-# OS files
 .DS_Store
-Thumbs.db
-
-# Logs
 *.log
+coverage/
 ```
-
-> [!WARNING]
-> **Extra critical this level.** Your `.env` file will now contain `JWT_SECRET` — the key that signs all authentication tokens. If this leaks, anyone can forge tokens and impersonate any user.
 
 ---
 
-## Step 4: Create the Frontend with Vite
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
+## 2. Frontend Setup
 
 ```bash
 npm create vite@latest client -- --template react-ts
-```
-
-```bash
 cd client
-```
-
-> [!IMPORTANT]
-> **You are now in:** `vault-note/client/`
-
-```bash
-npm install
 npm install react-router-dom
-```
-
-**New dependency:**
-
-| Package | What It Does | Why We Need It |
-|---------|-------------|----------------|
-| `react-router-dom` | Client-side routing for React | Multiple pages (login, register, notes) without full page reloads |
-
-> [!NOTE]
-> **Technical**: React Router provides declarative routing for React applications. It intercepts browser navigation events and renders different components based on the URL, without requesting a new page from the server.
-
-> [!NOTE]
-> **Plain English**: Without React Router, your app is one page. With it, you get `/login`, `/register`, `/notes` — each showing different content. When you click a link, React Router swaps the component without refreshing the page. The URL changes, the browser back button works, but no full page reload happens.
-
-### Verify It Works
-
-```bash
-npm run dev
-```
-
-Open `http://localhost:5173`. See the Vite starter page. Press `Ctrl+C` to stop.
-
-```bash
+npm install
 cd ..
 ```
 
-> [!IMPORTANT]
-> **You are now in:** `vault-note/`
+> **Key Concept: React Router**
+> Until now, our apps were single-page with view switching via state. React Router adds real URL-based navigation: `/login`, `/register`, `/notes`. The browser's address bar changes, back/forward buttons work, and users can bookmark pages.
 
 ---
 
-## Step 5: Create the Backend
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
+## 3. Backend Setup
 
 ```bash
-mkdir -p server/src
+mkdir -p server/src/{db,routes,middleware,types}
 cd server
-```
-
-> [!IMPORTANT]
-> **You are now in:** `vault-note/server/`
-
-```bash
 npm init -y
 ```
 
 ### Install Dependencies
 
 ```bash
-npm install express cors pg dotenv bcrypt jsonwebtoken
-npm install -D typescript @types/express @types/cors @types/pg @types/node @types/bcrypt @types/jsonwebtoken ts-node nodemon
+# Runtime dependencies
+npm install express cors pg dotenv bcryptjs jsonwebtoken
+
+# TypeScript and dev tools
+npm install typescript ts-node nodemon
 ```
 
-**New packages vs Level 2:**
+| Package | What It Does | New in Level 3? |
+|---------|-------------|-----------------|
+| `bcryptjs` | Hashes passwords (one-way) | Yes |
+| `jsonwebtoken` | Creates and verifies JWT tokens | Yes |
+| `express` | Web framework | No |
+| `cors` | Cross-origin requests | No |
+| `pg` | PostgreSQL client | No |
+| `dotenv` | Environment variables | No |
 
-| Package | Type | What It Does | Why We Need It |
-|---------|------|-------------|----------------|
-| `bcrypt` | Production | Password hashing | Hashes passwords before storing, compares on login |
-| `jsonwebtoken` | Production | JWT creation + verification | Creates tokens on login, verifies on every protected request |
-| `@types/bcrypt` | Dev | Type definitions for bcrypt | TypeScript needs bcrypt types |
-| `@types/jsonwebtoken` | Dev | Type definitions for jsonwebtoken | TypeScript needs JWT types |
+> **Why `bcryptjs` (not `bcrypt`)?** `bcryptjs` is a pure JavaScript implementation — no native compilation required. `bcrypt` (without the `js`) uses native C++ bindings that can cause installation issues across platforms. `bcryptjs` is slightly slower but works everywhere without build tools.
 
-Everything else (`express`, `cors`, `pg`, `dotenv`, `typescript`, etc.) is the same as Level 2.
+### Install Type Definitions
+
+```bash
+npm install @types/node @types/express @types/cors @types/pg @types/bcryptjs @types/jsonwebtoken
+```
+
+> **Why not --save-dev?**
+> Deployment platforms skip devDependencies during production builds. But `tsc` (the TypeScript compiler) needs these type definitions to compile your code. If they're in devDependencies, you get: `error TS7016: Could not find a declaration file for module 'express'`.
+>
+> This is the most common deployment failure. Always install @types as regular dependencies.
 
 ### Configure TypeScript
 
@@ -180,18 +110,18 @@ Create `server/tsconfig.json`:
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
 ```
 
-Same as Levels 1 and 2.
+> ⚠️ **Critical: `"types": ["node"]`**
+> Without this, you'll get `Cannot find name 'process'` and `Cannot find name 'console'` errors during deployment. This tells TypeScript to include Node.js type definitions.
 
-### Configure Scripts
-
-Update `server/package.json` — add a `scripts` section:
+### Add Scripts
 
 ```json
 {
@@ -203,275 +133,110 @@ Update `server/package.json` — add a `scripts` section:
 }
 ```
 
-```bash
-cd ..
+### Verify Dependencies
+
+Your `server/package.json` `dependencies` should include all @types packages:
+
+```json
+{
+  "dependencies": {
+    "@types/bcryptjs": "...",
+    "@types/cors": "...",
+    "@types/express": "...",
+    "@types/jsonwebtoken": "...",
+    "@types/node": "...",
+    "@types/pg": "...",
+    "bcryptjs": "...",
+    "cors": "...",
+    "dotenv": "...",
+    "express": "...",
+    "jsonwebtoken": "...",
+    "nodemon": "...",
+    "pg": "...",
+    "ts-node": "...",
+    "typescript": "..."
+  }
+}
 ```
 
-> [!IMPORTANT]
-> **You are now in:** `vault-note/`
+> ⚠️ **If @types are in devDependencies, fix it:**
+> ```bash
+> npm uninstall @types/node @types/express @types/cors @types/pg @types/bcryptjs @types/jsonwebtoken
+> npm install @types/node @types/express @types/cors @types/pg @types/bcryptjs @types/jsonwebtoken
+> ```
 
 ---
 
-> [!TIP]
-> **Session Break** — You've scaffolded the full project structure with both frontend and backend dependencies. Save your work and take a break.
-> When you return, you'll create the PostgreSQL database and configure the connection.
-
----
-
-## Step 6: Create the Database
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
-
-Verify PostgreSQL is running:
-
-```bash
-brew services list
-```
-
-If `postgresql@16` isn't started:
-
-```bash
-brew services start postgresql@16
-```
-
-Create the database:
+## 4. Create the Database
 
 ```bash
 createdb vaultnote
 ```
 
-Verify it exists:
-
-```bash
-psql vaultnote -c "SELECT 1;"
-```
-
-You should see a result, confirming the database is accessible.
-
 ---
 
-## Step 7: Create the Environment File
+## 5. Configure Environment Variables
+
+Create `server/.env`:
 
 ```bash
-cd server
-```
-
-> [!IMPORTANT]
-> **You are now in:** `vault-note/server/`
-
-Create `.env`:
-
-```env
-DATABASE_URL=postgresql://localhost:5432/vaultnote
 PORT=3001
+DATABASE_URL=postgresql://localhost:5432/vaultnote
 CORS_ORIGIN=http://localhost:5173
 JWT_SECRET=your-super-secret-key-change-this-in-production
 JWT_EXPIRES_IN=7d
 ```
 
-**New environment variables:**
+| Variable | What It Is | Security Note |
+|----------|-----------|---------------|
+| `JWT_SECRET` | The key used to sign JWT tokens | **Must be long and random in production.** If someone gets this, they can forge tokens for any user. |
+| `JWT_EXPIRES_IN` | How long tokens are valid | 7 days is reasonable for development. Consider shorter for production. |
 
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `JWT_SECRET` | A long, random string | Signs and verifies JWT tokens. If someone knows this, they can forge any token. |
-| `JWT_EXPIRES_IN` | `7d` | Tokens expire after 7 days. Users must log in again after that. |
-
-> [!WARNING]
-> **`JWT_SECRET` must be kept secret.** In development, the value above is fine. In production, use a long random string (32+ characters). You can generate one with:
-> ```bash
-> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-> ```
-
+**Generate a production-grade secret:**
 ```bash
-cd ..
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
-
-> [!IMPORTANT]
-> **You are now in:** `vault-note/`
-
-### Verify .env Is Ignored
-
-```bash
-git status
-```
-
-Confirm `server/.env` does NOT appear in the output.
 
 ---
 
-## Step 8: Prettier Configuration
+## 6. Prettier Configuration
 
-### Frontend
-
-```bash
-cd client
-npm install -D prettier eslint-config-prettier
-```
-
-Create `client/.prettierrc`:
+Create `.prettierrc` in the project root:
 
 ```json
 {
   "semi": true,
-  "trailingComma": "es5",
   "singleQuote": true,
-  "printWidth": 80,
-  "tabWidth": 2
+  "tabWidth": 2,
+  "trailingComma": "all"
 }
-```
-
-```bash
-cd ..
-```
-
-### Backend
-
-```bash
-cd server
-npm install -D prettier
-```
-
-Create `server/.prettierrc`:
-
-```json
-{
-  "semi": true,
-  "trailingComma": "es5",
-  "singleQuote": true,
-  "printWidth": 80,
-  "tabWidth": 2
-}
-```
-
-```bash
-cd ..
-```
-
-> [!IMPORTANT]
-> **You are now in:** `vault-note/`
-
----
-
-## Step 9: Create the README
-
-Create `vault-note/README.md`:
-
-```markdown
-# VaultNote — Secure Personal Notes
-
-A full-stack notes application with user authentication. Users register, log in, and manage private notes that only they can access. Built with JWT authentication, bcrypt password hashing, and role-based access control.
-
-## Features
-
-- User registration and login with secure password hashing
-- JWT token-based authentication
-- Private notes — users can only access their own
-- Full CRUD operations on notes
-- Admin statistics dashboard
-- Client-side routing with React Router
-
-## Tech Stack
-
-- **Frontend**: React, TypeScript, Vite, React Router
-- **Backend**: Node.js, Express, TypeScript
-- **Database**: PostgreSQL
-- **Auth**: bcrypt, JSON Web Tokens
-- **Deployment**: Vercel (frontend), Render (backend + database)
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- npm 10+
-- PostgreSQL 16+
-
-### Installation
-
-```bash
-git clone https://github.com/yourusername/vault-note.git
-cd vault-note
-
-cd client && npm install && cd ..
-cd server && npm install && cd ..
-
-createdb vaultnote
-psql vaultnote < server/src/db/schema.sql
-
-# Create server/.env with DATABASE_URL, JWT_SECRET, etc.
-```
-
-### Running Locally
-
-```bash
-# Terminal 1 — Backend
-cd server && npm run dev
-
-# Terminal 2 — Frontend
-cd client && npm run dev
-```
-
-## API Endpoints
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | /api/auth/register | No | Create account |
-| POST | /api/auth/login | No | Login, get token |
-| GET | /api/auth/me | Yes | Current user info |
-| GET | /api/notes | Yes | List user's notes |
-| POST | /api/notes | Yes | Create a note |
-| GET | /api/notes/:id | Yes | Get a note |
-| PUT | /api/notes/:id | Yes | Update a note |
-| DELETE | /api/notes/:id | Yes | Delete a note |
-| GET | /api/admin/stats | Admin | Usage statistics |
-| GET | /api/health | No | Health check |
 ```
 
 ---
 
-## Step 10: First Commit
-
-> [!IMPORTANT]
-> **You should be in:** `vault-note/`
+## 7. First Commit
 
 ```bash
+cd ..
 git add .
-git commit -m "feat: initialize project structure with auth dependencies"
+git commit -m "feat: scaffold vault-note with auth dependencies"
 ```
+
+### ✅ Checkpoint
+
+- [ ] PostgreSQL has `vaultnote` database
+- [ ] `server/.env` has JWT_SECRET and JWT_EXPIRES_IN
+- [ ] `server/package.json` has `bcryptjs`, `jsonwebtoken`, and ALL @types in `dependencies`
+- [ ] `server/tsconfig.json` has `"types": ["node"]`
+- [ ] `client/` has `react-router-dom` installed
 
 ---
 
-## Project Structure So Far
-
-```
-vault-note/
-├── .git/
-├── .gitignore
-├── README.md
-├── client/
-│   ├── node_modules/
-│   ├── src/                  ← React code (empty for now)
-│   ├── index.html
-│   ├── package.json          ← Now includes react-router-dom
-│   ├── tsconfig.json
-│   ├── vite.config.ts
-│   └── .prettierrc
-└── server/
-    ├── node_modules/
-    ├── src/                  ← Express code (empty for now)
-    ├── .env                  ← DATABASE_URL + JWT_SECRET (not committed)
-    ├── package.json          ← Now includes bcrypt + jsonwebtoken
-    ├── tsconfig.json
-    └── .prettierrc
-
-ALSO RUNNING:
-PostgreSQL service on port 5432
-└── Database: vaultnote (empty — no tables)
-```
+> **Session Break** — Project scaffolded with auth dependencies.
+> When you return, you'll design the database schema in [Step 3 — Database](../03-database/).
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 01 — Orientation](../01-orientation/) | [Level 3 Overview](../) | [03 — Database Design →](../03-database/) |
+| | |
+|:---|---:|
+| [← Step 1: Orientation](../01-orientation/) | [Step 3 — Database →](../03-database/) |

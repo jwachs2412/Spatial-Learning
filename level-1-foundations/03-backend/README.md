@@ -1,506 +1,372 @@
-`Level 1` **Step 3 of 7** — Building the Backend
-
-# 03 — Building the Backend
+# Step 3 — Building the Backend
 
 ## Spatial Orientation
 
 ```
 dev-pulse/
-├── client/          ← NOT working here right now
-└── server/          ← ★ WE ARE HERE ★
+├── client/                ← Built in Step 2 (untouched this step)
+└── server/                ← YOU ARE HERE
     └── src/
-        ├── index.ts       ← Server entry point (we'll build this)
+        ├── types/
+        │   └── index.ts     ← Define data shapes
         ├── routes/
-        │   └── entries.ts ← API routes (we'll build this)
-        └── types/
-            └── index.ts   ← Type definitions (we'll build this)
+        │   └── entries.ts   ← Handle API requests
+        └── index.ts         ← Server entry point
 ```
 
-**What layer are we in?** The SERVER layer. This code runs on a computer (your machine now, a cloud server later). Users never see this code. The browser cannot access these files.
-
-**What does this layer do?** It listens for HTTP requests, processes them, and sends back responses. It's the kitchen — it receives orders and sends back food.
+You're working in `server/src/`. Every file you create lives here. The frontend doesn't exist to the backend — they only communicate through HTTP.
 
 ---
 
-## Step 1: Define Types
+## 1. Define Your Types
 
-**Where are we?** `server/src/types/index.ts`
+> **Key Concept: TypeScript Interfaces**
+> An interface defines the *shape* of your data — what fields exist, what types they are. Think of it like a blueprint: it doesn't create anything, but it ensures everything built from it has the right structure. If you try to create an object missing a required field, TypeScript catches it at compile time.
 
-**Why types first?** Types are the blueprint. Before building anything, define what the data looks like. This is a TypeScript superpower — you describe the shape of your data, and the compiler ensures you never violate that shape.
+### 🏗️ Your Turn
 
-First, create the folder structure. Open your terminal:
+Before looking at the code, think about what a mood entry needs:
+- A unique identifier
+- The mood itself (e.g., "happy", "frustrated")
+- An energy level (1-5)
+- A note about the day
+- When it was created
 
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/`
+Write the interface yourself, then check the solution.
 
-```bash
-mkdir -p server/src/types
-mkdir -p server/src/routes
-```
+<details>
+<summary>See the solution</summary>
 
-Now create the types file. In VS Code, create a new file at `server/src/types/index.ts` (right-click on the `server/src/types` folder → New File → name it `index.ts`).
-
-Add this code to `server/src/types/index.ts`:
+Create `server/src/types/index.ts`:
 
 ```typescript
-/**
- * Represents a single mood entry submitted by a developer.
- *
- * Think of this as a row in a spreadsheet:
- * | id | mood    | energy | note              | createdAt           |
- * |----|---------|--------|-------------------|---------------------|
- * | 1  | "happy" | 4      | "Great coding day"| 2026-03-01T14:00:00 |
- */
 export interface MoodEntry {
   id: number;
-  mood: 'happy' | 'neutral' | 'frustrated' | 'tired' | 'energized';
-  energy: number;  // 1-5 scale
+  mood: 'happy' | 'neutral' | 'sad' | 'frustrated' | 'energized';
+  energy: number;      // 1-5
   note: string;
-  createdAt: string;  // ISO 8601 date string
+  date: string;        // ISO format: "2025-01-15"
+  createdAt: string;   // ISO timestamp
 }
 
-/**
- * The shape of data the client sends when creating a new entry.
- * Notice: no `id` or `createdAt` — the SERVER assigns those.
- *
- * Why? The client doesn't get to choose its own ID (that would be
- * a security and consistency problem). The server is the authority.
- */
-export interface CreateEntryRequest {
-  mood: MoodEntry['mood'];
-  energy: number;
-  note: string;
-}
+export type CreateEntryRequest = Omit<MoodEntry, 'id' | 'createdAt'>;
 ```
 
-### TypeScript Concepts Explained
+</details>
 
-**`interface`**
-- > [!NOTE]
-> **Technical**: An interface defines the shape of an object — what properties it has and what types those properties are.
-- > [!NOTE]
-> **Plain English**: It's a contract. If something claims to be a `MoodEntry`, it MUST have an `id` (number), a `mood` (one of five specific strings), an `energy` (number), a `note` (string), and a `createdAt` (string). No exceptions.
+**Why these choices matter:**
 
-**Union Types (`'happy' | 'neutral' | 'frustrated' | 'tired' | 'energized'`)**
-- > [!NOTE]
-> **Technical**: A union type allows a value to be one of several specified types.
-- > [!NOTE]
-> **Plain English**: The mood can only be one of these five words. If you try to set mood to `"ecstatic"`, TypeScript will show an error before your code even runs. This catches bugs at development time, not in production.
+| Decision | Why |
+|----------|-----|
+| `mood: 'happy' \| 'neutral' \| ...` | Union type limits values to valid options. TypeScript will catch `mood: "ecstatic"` as an error. |
+| `energy: number` | We'll validate 1-5 in the route handler, but the type stays general. |
+| `date: string` (not `Date`) | JSON doesn't have a Date type. Dates travel as strings over HTTP. |
+| `Omit<MoodEntry, 'id' \| 'createdAt'>` | When creating an entry, the client doesn't provide `id` or `createdAt` — the server generates those. `Omit` creates a new type with those fields removed. |
 
-**`MoodEntry['mood']`**
-- > [!NOTE]
-> **Technical**: An indexed access type that extracts the type of a specific property from another type.
-- > [!NOTE]
-> **Plain English**: Instead of repeating the list of mood strings, we say "the mood field in CreateEntryRequest is the same type as the mood field in MoodEntry." If we add a new mood option to MoodEntry, CreateEntryRequest automatically includes it.
+> **Key Concept: `Omit<Type, Keys>`**
+> `Omit` is a TypeScript utility type that creates a new type by removing specified keys from an existing type. Instead of duplicating the interface with fewer fields, you derive one type from another. This means if you add a field to `MoodEntry`, the `CreateEntryRequest` type automatically stays in sync.
 
 ---
 
-## Step 2: Build the Express Server
+## 2. Build the Server Entry Point
 
-**Where are we?** `server/src/index.ts`
+> **Key Concept: Express**
+> Express is a minimal web framework for Node.js. It handles incoming HTTP requests and routes them to the right handler function. Think of it like a receptionist: it receives every request that comes in and directs it to the right department.
 
-**What is this file?** The entry point — the first file that runs when you start the server. It creates the Express application, configures middleware, connects routes, and starts listening for requests.
+### 🏗️ Your Turn
 
-In VS Code, create a new file at `server/src/index.ts` (right-click on the `server/src` folder → New File → name it `index.ts`).
+Write the server entry point. It needs to:
+1. Import and create an Express app
+2. Add middleware to parse JSON request bodies
+3. Add CORS middleware to allow frontend requests
+4. Add a health check endpoint at `GET /api/health`
+5. Start listening on port 3001
 
-Add this code to `server/src/index.ts`:
+Hints:
+- `express.json()` is middleware that parses JSON request bodies
+- `cors({ origin: '...' })` configures which origins can make requests
+- `app.listen(port, callback)` starts the server
+
+<details>
+<summary>See the solution</summary>
+
+Create `server/src/index.ts`:
 
 ```typescript
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { entriesRouter } from './routes/entries';
 
-// Create the Express application
 const app = express();
-
-// Define the port (use environment variable or default to 3001)
 const PORT = process.env.PORT || 3001;
 
-// ─── MIDDLEWARE ───────────────────────────────────────────────
-// Middleware runs on EVERY request before it reaches your routes.
-// Think of it as a security checkpoint at the entrance of a building.
-// Every visitor must pass through before going to their destination.
-
-// Parse JSON request bodies
-// Without this, req.body would be undefined when clients send JSON
+// Middleware
 app.use(express.json());
-
-// Enable CORS — allow the frontend to make requests to this server
-// Without this, the browser would block all requests from localhost:5173
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
 }));
 
-// ─── ROUTES ──────────────────────────────────────────────────
-// Routes define what happens when a request arrives at a specific URL.
-// We organize routes in separate files to keep this file clean.
+// Routes
 app.use('/api/entries', entriesRouter);
 
-// ─── HEALTH CHECK ────────────────────────────────────────────
-// A simple endpoint that confirms the server is running.
-// Deployment platforms use this to verify your server is alive.
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// ─── START SERVER ────────────────────────────────────────────
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 ```
 
-### Line-by-Line Breakdown
+</details>
 
-**`import express from 'express'`**
-Imports the Express library. Express is a minimal web framework that handles HTTP requests. Without it, you'd have to use Node's raw `http` module, which requires much more code for the same result.
+**Line-by-line breakdown:**
 
-**`const app = express()`**
-Creates an Express application instance. This `app` object is the core of your server — you attach middleware and routes to it.
+| Line | What It Does | Why It Matters |
+|------|-------------|----------------|
+| `import express, { Request, Response } from 'express'` | Import Express and its TypeScript types | `Request` and `Response` give you autocomplete and type checking on handler parameters |
+| `const PORT = process.env.PORT \|\| 3001` | Read port from environment variable, default to 3001 | Deployment platforms set `PORT` automatically. Fallback to 3001 for local development |
+| `app.use(express.json())` | Parse JSON request bodies | Without this, `req.body` is `undefined` for POST requests |
+| `app.use(cors({ origin: '...' }))` | Allow cross-origin requests from your frontend | Without this, the browser blocks every request from your React app |
+| `(_req: Request, res: Response)` | Type the parameters explicitly | Prevents `Parameter implicitly has 'any' type` errors. The `_` prefix means "I know I'm not using this parameter" |
+| `app.use('/api/entries', entriesRouter)` | Mount the entries router at `/api/entries` | All routes in `entriesRouter` are prefixed with `/api/entries` |
 
-**`const PORT = process.env.PORT || 3001`**
-Reads the PORT from environment variables. If none is set (local development), defaults to 3001. Why 3001? It doesn't conflict with Vite's 5173. Any unused port would work.
+> ⚠️ **Common Mistake: Implicit `any` Types**
+> If you write `(req, res)` instead of `(req: Request, res: Response)`, TypeScript will error with `Parameter 'req' implicitly has an 'any' type`. Always import and use the types from Express. This also gives you autocomplete on `req.body`, `req.params`, `res.json()`, etc.
 
-**`app.use(express.json())`**
-Middleware. When a client sends JSON in a request body, this parses it and puts the result in `req.body`. Without it, you'd receive raw text and have to parse it yourself.
-
-**`app.use(cors(...))`**
-Middleware. Tells the browser "requests from this origin are allowed." Without it, the browser blocks cross-origin requests (see Orientation section on CORS).
-
-**`app.use('/api/entries', entriesRouter)`**
-Mounts the entries route handler at `/api/entries`. Any request to `/api/entries` or `/api/entries/anything` gets handled by `entriesRouter`.
-
-**`app.listen(PORT, callback)`**
-Tells the server to start listening for HTTP requests on the specified port. The callback runs once the server is ready.
-
-### What Is Middleware?
-
-```
-                    REQUEST ARRIVES
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │   express.json()    │  ← Parses JSON body
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │       cors()        │  ← Checks origin, adds headers
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │    YOUR ROUTE       │  ← Your handler code runs
-              │    HANDLER          │
-              └──────────┬──────────┘
-                         │
-                         ▼
-                  RESPONSE SENT
-```
-
-> [!NOTE]
-> **Technical**: Middleware functions are functions that have access to the request object, response object, and the next middleware function. They can execute code, modify the request/response, end the cycle, or pass control to the next middleware.
-
-> [!NOTE]
-> **Plain English**: Middleware is like a chain of checkpoints. Every request passes through each checkpoint in order. Each checkpoint can inspect the request, modify it, reject it, or pass it along. `express.json()` is a checkpoint that reads the request body and turns JSON text into a JavaScript object. `cors()` is a checkpoint that adds the right headers to allow cross-origin requests.
+> ⚠️ **Common Mistake: Forgetting `express.json()`**
+> Without `app.use(express.json())`, your POST route will receive `undefined` for `req.body`. This is the #1 "why is my data undefined?" question. The middleware must be added **before** your routes.
 
 ---
 
-## Step 3: Build the API Routes
+## 3. Build the Entries Route
 
-**Where are we?** `server/src/routes/entries.ts`
+> **Key Concept: Router**
+> An Express Router is a mini-application that handles a subset of routes. Instead of putting every endpoint in `index.ts`, you group related routes in their own file. Think of it like departments in a company: the main receptionist (index.ts) directs requests to the right department (router), which handles the specifics.
 
-**What is this file?** It defines what happens when someone sends a request to `/api/entries`. It contains the route handlers — the functions that receive requests and send responses.
+### 🏗️ Your Turn
 
-In VS Code, create a new file at `server/src/routes/entries.ts` (right-click on the `server/src/routes` folder → New File → name it `entries.ts`).
+Build the entries router with two endpoints:
+- `GET /` — Return all entries (remember, the router is mounted at `/api/entries`, so `/` here means `/api/entries`)
+- `POST /` — Create a new entry with validation
 
-Add this code to `server/src/routes/entries.ts`:
+Validation rules:
+- `mood` must be one of: 'happy', 'neutral', 'sad', 'frustrated', 'energized'
+- `energy` must be a number between 1 and 5
+- `note` must be a string (can be empty)
+- `date` must be provided
+
+Think about: Where does the data live? (In memory — an array.) How do you generate unique IDs? How do you validate input?
+
+<details>
+<summary>See the solution</summary>
+
+Create `server/src/routes/entries.ts`:
 
 ```typescript
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { MoodEntry, CreateEntryRequest } from '../types';
 
 const router = Router();
 
-// ─── IN-MEMORY DATA STORE ────────────────────────────────────
-// This array acts as our "database" for now.
-// WARNING: Data is lost when the server restarts.
-// In Level 2, we replace this with a real database.
-let entries: MoodEntry[] = [];
+// In-memory data store
+const entries: MoodEntry[] = [];
 let nextId = 1;
 
-// ─── GET /api/entries ────────────────────────────────────────
-// Returns all mood entries, newest first.
-//
-// Request:  GET /api/entries
-// Response: 200 OK, [{ id, mood, energy, note, createdAt }, ...]
-router.get('/', (_req, res) => {
-  // Return entries sorted newest first
-  const sorted = [...entries].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-  res.json(sorted);
+// Valid mood values
+const VALID_MOODS = ['happy', 'neutral', 'sad', 'frustrated', 'energized'] as const;
+
+// GET /api/entries — Return all entries
+router.get('/', (_req: Request, res: Response) => {
+  res.json(entries);
 });
 
-// ─── POST /api/entries ───────────────────────────────────────
-// Creates a new mood entry.
-//
-// Request:  POST /api/entries
-//           Body: { mood: "happy", energy: 4, note: "Great day" }
-// Response: 201 Created, { id, mood, energy, note, createdAt }
-router.post('/', (req, res) => {
-  const { mood, energy, note } = req.body as CreateEntryRequest;
+// POST /api/entries — Create a new entry
+router.post('/', (req: Request, res: Response) => {
+  const { mood, energy, note, date } = req.body as CreateEntryRequest;
 
-  // ─── VALIDATION ──────────────────────────────────────────
-  // Never trust data from the client. Always validate.
-  // The browser is untrusted territory.
+  // Validation
+  const errors: string[] = [];
 
-  const validMoods = ['happy', 'neutral', 'frustrated', 'tired', 'energized'];
+  if (!mood || !VALID_MOODS.includes(mood)) {
+    errors.push(`mood must be one of: ${VALID_MOODS.join(', ')}`);
+  }
 
-  if (!mood || !validMoods.includes(mood)) {
-    res.status(400).json({
-      error: 'Invalid mood. Must be one of: ' + validMoods.join(', '),
-    });
+  if (energy === undefined || typeof energy !== 'number' || energy < 1 || energy > 5) {
+    errors.push('energy must be a number between 1 and 5');
+  }
+
+  if (typeof note !== 'string') {
+    errors.push('note must be a string');
+  }
+
+  if (!date) {
+    errors.push('date is required');
+  }
+
+  if (errors.length > 0) {
+    res.status(400).json({ errors });
     return;
   }
 
-  if (!energy || energy < 1 || energy > 5 || !Number.isInteger(energy)) {
-    res.status(400).json({
-      error: 'Energy must be an integer between 1 and 5',
-    });
-    return;
-  }
-
-  if (!note || typeof note !== 'string' || note.trim().length === 0) {
-    res.status(400).json({
-      error: 'Note is required and must be a non-empty string',
-    });
-    return;
-  }
-
-  if (note.length > 500) {
-    res.status(400).json({
-      error: 'Note must be 500 characters or fewer',
-    });
-    return;
-  }
-
-  // ─── CREATE ENTRY ────────────────────────────────────────
+  // Create entry
   const newEntry: MoodEntry = {
     id: nextId++,
     mood,
     energy,
-    note: note.trim(),
+    note: note || '',
+    date,
     createdAt: new Date().toISOString(),
   };
 
   entries.push(newEntry);
-
-  // 201 = "Created" — the standard status code when a new resource is made
   res.status(201).json(newEntry);
 });
 
 export { router as entriesRouter };
 ```
 
-### Route Handler Anatomy
+</details>
 
-```typescript
-router.get('/', (_req, res) => {
-  res.json(sorted);
-});
-```
+**Key concepts in this code:**
 
-| Part | What It Is |
-|------|-----------|
-| `router.get` | Handle GET requests |
-| `'/'` | At this path (relative to where the router is mounted — `/api/entries/`) |
-| `_req` | The request object (underscore means "we don't use this") |
-| `res` | The response object (what we send back) |
-| `res.json(...)` | Send a JSON response |
+| Pattern | What It Does | Why |
+|---------|-------------|-----|
+| `const entries: MoodEntry[] = []` | In-memory data store | Simple for Level 1. Data disappears when the server restarts. Level 2 adds a real database. |
+| `let nextId = 1` | Simple auto-incrementing ID | In production, databases generate IDs. This is a temporary solution. |
+| `VALID_MOODS.includes(mood)` | Validates against allowed values | Never trust data from the client. Always validate on the server. |
+| `errors: string[]` | Collect all errors, then return them | Better UX: the user sees all problems at once, not one at a time. |
+| `res.status(400).json({ errors })` | Return 400 with error details | 400 = "your request was bad" + details about what was wrong. |
+| `res.status(201).json(newEntry)` | Return 201 with the created entry | 201 = "created successfully." Return the full object so the frontend doesn't need a second request. |
+| `return` after `res.status(400)` | Stop execution after sending error | Without `return`, the code continues and tries to create the entry anyway. |
 
-### Why We Validate
+> ⚠️ **Common Mistake: Not returning after `res.status()`**
+> Express doesn't stop execution when you call `res.json()`. If you don't `return`, the code continues running and may try to send a second response, causing: `Error: Cannot set headers after they are sent to the client`.
 
-```
-CLIENT (untrusted)                    SERVER (trusted)
-─────────────────                     ────────────────
-User could send:                      We check:
-{ mood: "HACKED", energy: 9999 }  →  Is mood valid? NO → 400 error
-{ mood: "happy", energy: 4 }      →  Is mood valid? YES → continue
-```
+### 🧠 Debugging Exercise
 
-> [!NOTE]
-> **Technical**: Input validation ensures that data conforms to expected formats and constraints before processing, preventing data corruption, injection attacks, and unexpected behavior.
+What would happen if you removed `app.use(express.json())` from `index.ts` and then sent a POST request with a JSON body?
 
-> [!NOTE]
-> **Plain English**: The frontend might send anything — even data that looks nothing like a mood entry. Maybe there's a bug in the frontend. Maybe someone is using curl or Postman to send garbage. The backend must check everything and reject bad data with a clear error message.
+<details>
+<summary>Answer</summary>
 
-**Key principle**: The frontend validates for user experience (quick feedback). The backend validates for security and data integrity (final authority).
+`req.body` would be `undefined`. The destructuring `const { mood, energy, note, date } = req.body` would throw: `TypeError: Cannot destructure property 'mood' of 'undefined'`. The server would crash with a 500 error. The `express.json()` middleware is what parses the raw request body string into a JavaScript object.
+
+</details>
 
 ---
 
-> [!TIP]
-> **Session Break** — You've defined types, built the Express server, and written the API routes with validation. Save your work and take a break.
-> When you return, you'll test the backend with curl and commit your progress.
+## 4. Test Your API
 
----
-
-## Step 4: Test the Backend
-
-### Start the Server
-
-Open your terminal.
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/` (the project root)
+Start the server:
 
 ```bash
 cd server
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/server/`
-
-```bash
 npm run dev
 ```
 
 You should see: `Server running on http://localhost:3001`
 
-### Test with curl or Thunder Client
+### Test with curl
 
-Open a **second terminal** (keep the server running in the first one). The curl commands below can be run from any directory — they're sending HTTP requests to your running server, not accessing files.
+Open a **new terminal** (keep the server running):
 
-**Test health check:**
 ```bash
+# Health check
 curl http://localhost:3001/api/health
 ```
+
 Expected: `{"status":"ok","timestamp":"..."}`
 
-**Test GET entries (empty):**
 ```bash
-curl http://localhost:3001/api/entries
-```
-Expected: `[]`
-
-**Test POST a new entry:**
-```bash
+# Create an entry
 curl -X POST http://localhost:3001/api/entries \
   -H "Content-Type: application/json" \
-  -d '{"mood":"happy","energy":4,"note":"Great coding day"}'
+  -d '{"mood": "happy", "energy": 4, "note": "Great day!", "date": "2025-01-15"}'
 ```
-Expected: `{"id":1,"mood":"happy","energy":4,"note":"Great coding day","createdAt":"..."}`
 
-**Test GET entries (should have one now):**
+Expected: `{"id":1,"mood":"happy","energy":4,"note":"Great day!","date":"2025-01-15","createdAt":"..."}`
+
 ```bash
+# Get all entries
 curl http://localhost:3001/api/entries
 ```
-Expected: `[{"id":1,...}]`
 
-**Test validation (bad mood):**
+Expected: Array containing the entry you just created.
+
 ```bash
+# Test validation (missing mood)
 curl -X POST http://localhost:3001/api/entries \
   -H "Content-Type: application/json" \
-  -d '{"mood":"invalid","energy":4,"note":"test"}'
+  -d '{"energy": 3, "note": "test", "date": "2025-01-15"}'
 ```
-Expected: `{"error":"Invalid mood. Must be one of: happy, neutral, frustrated, tired, energized"}`
 
-### Using Thunder Client (VS Code)
+Expected: `{"errors":["mood must be one of: happy, neutral, sad, frustrated, energized"]}` with status 400.
 
-If you installed the Thunder Client extension:
-1. Click the thunder icon in VS Code's sidebar
-2. Create a new request
-3. Set method to GET, URL to `http://localhost:3001/api/entries`
-4. Click Send
-5. See the response in the panel below
+### ✅ Checkpoint
 
-This is faster than writing curl commands and gives you a visual interface.
+- [ ] `GET /api/health` returns `{"status":"ok",...}`
+- [ ] `POST /api/entries` with valid data returns the created entry with status 201
+- [ ] `POST /api/entries` with invalid data returns errors with status 400
+- [ ] `GET /api/entries` returns all created entries
+
+If any of these fail, check:
+1. Is `express.json()` middleware added before routes?
+2. Are you sending `Content-Type: application/json` header?
+3. Is the JSON body valid (double quotes, no trailing commas)?
 
 ---
 
-## Step 5: Commit
-
-Stop the server by pressing `Ctrl+C` in the terminal where it's running.
-
-> [!IMPORTANT]
-> **You should be in:** `dev-pulse/server/`
-
-Go back to the project root first:
+## 5. Commit
 
 ```bash
-cd ..
-```
-
-> [!IMPORTANT]
-> **You are now in:** `dev-pulse/` (the project root)
-
-```bash
-git add server/
-git commit -m "feat: add Express server with mood entries API"
+git add .
+git commit -m "feat: add Express backend with typed entries API"
 ```
 
 ---
 
-You now have a working backend. Let's make sure you understand its place in the system:
+## 🧠 Spatial Check-In
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  WHAT EXISTS NOW                     │
-│                                                     │
-│   ┌───────────────────┐    ┌───────────────────┐   │
-│   │    FRONTEND        │    │    BACKEND ✓      │   │
-│   │    (not built yet) │    │                   │   │
-│   │                    │    │  GET /api/entries  │   │
-│   │                    │    │  POST /api/entries │   │
-│   │                    │    │  GET /api/health   │   │
-│   │                    │    │                   │   │
-│   │    NEXT STEP       │    │  In-memory data   │   │
-│   └───────────────────┘    └───────────────────┘   │
-│                                                     │
-│   Currently, only curl/Thunder Client can           │
-│   talk to the backend. Next we build the            │
-│   frontend to provide a real user interface.        │
-└─────────────────────────────────────────────────────┘
+1. Why do we validate data on the server even though we'll also validate on the frontend later?
+
+2. What happens to the entries array when you stop and restart the server? Why is this a problem, and what will we do about it in Level 2?
+
+3. Look at this route handler — what's the bug?
+```typescript
+router.post('/', (req: Request, res: Response) => {
+  const { mood } = req.body;
+  if (!mood) {
+    res.status(400).json({ error: 'mood required' });
+  }
+  // Create entry...
+  res.status(201).json(newEntry);
+});
 ```
 
----
+<details>
+<summary>Check Your Answers</summary>
 
-> [!TIP]
-> ## Spatial Check-In
+1. **Never trust the client.** The frontend runs in the user's browser — they can modify it, bypass validation, or send requests directly (with curl, Postman, or malicious scripts). Server validation is your last line of defense.
 
-1. **What happens if you restart the server?**
+2. **The array resets to empty.** In-memory storage is temporary — it only exists while the process runs. This is fine for Level 1, but in Level 2 we'll add PostgreSQL so data survives restarts.
 
-<details><summary>Answer</summary>
-
-All entries are lost (in-memory storage)
-
-</details>
-
-2. **What happens if you send a POST without `Content-Type: application/json`?**
-
-<details><summary>Answer</summary>
-
-`req.body` is undefined, validation fails
-
-</details>
-
-3. **Why do we validate on the server even though we'll also validate on the frontend?**
-
-<details><summary>Answer</summary>
-
-The server is the authority. The frontend is untrusted.
-
-</details>
-
-4. **What does `res.status(201).json(newEntry)` do?**
-
-<details><summary>Answer</summary>
-
-Sends HTTP status 201 (Created) and the new entry as JSON
+3. **Missing `return` after the error response.** After `res.status(400).json(...)`, execution continues to `res.status(201).json(newEntry)`, causing `Cannot set headers after they are sent`. Fix: add `return;` after the 400 response.
 
 </details>
 
 ---
 
-| | | |
-|:---|:---:|---:|
-| [← 02 — Project Setup](../02-project-setup/) | [Level 1 Overview](../) | [04 — Building the Frontend →](../04-frontend/) |
+> **Session Break** — You've built the backend API.
+> When you return, you'll build the React frontend in [Step 4 — Frontend](../04-frontend/).
+
+---
+
+| | |
+|:---|---:|
+| [← Step 2: Project Setup](../02-project-setup/) | [Step 4 — Frontend →](../04-frontend/) |
