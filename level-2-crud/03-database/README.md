@@ -62,16 +62,57 @@ CREATE TABLE tasks (
 
 </details>
 
-**Line-by-line breakdown:**
+### Reading This Schema Line-by-Line
 
-| SQL | What It Does | Why |
-|-----|-------------|-----|
-| `SERIAL PRIMARY KEY` | Auto-incrementing integer, unique identifier | Every row needs a unique ID. SERIAL auto-generates it (1, 2, 3, ...) |
-| `VARCHAR(100) NOT NULL` | String up to 100 chars, cannot be empty | Enforces at the database level — even if the backend has a bug, the DB rejects invalid data |
-| `TEXT DEFAULT ''` | Unlimited length string, defaults to empty | Description is optional but always has a value |
-| `TIMESTAMP DEFAULT NOW()` | Auto-set to current time on creation | Automatic audit trail — you always know when a row was created |
-| `REFERENCES projects(id)` | Foreign key — links tasks to projects | Database enforces that `project_id` must be a real project ID |
-| `ON DELETE CASCADE` | When a project is deleted, its tasks are deleted too | Prevents orphan tasks (tasks pointing to a deleted project) |
+A schema file is a sequence of SQL statements, each ending in `;`. PostgreSQL executes them in order. Lines starting with `--` are comments.
+
+#### The `projects` Table
+
+```sql
+CREATE TABLE projects (
+  id          SERIAL PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL,
+  description TEXT DEFAULT '',
+  created_at  TIMESTAMP DEFAULT NOW(),
+  updated_at  TIMESTAMP DEFAULT NOW()
+);
+```
+
+- `CREATE TABLE projects ( ... );` — "make a new table named `projects`." Column definitions go inside the parentheses, separated by commas.
+- `id SERIAL PRIMARY KEY`
+  - `SERIAL` is PostgreSQL shorthand for "auto-incrementing integer." First row gets `id = 1`, next gets `2`, and so on. You never set it manually.
+  - `PRIMARY KEY` says "this column uniquely identifies each row." Enforces uniqueness and non-null automatically, and builds an index on it.
+- `name VARCHAR(100) NOT NULL`
+  - `VARCHAR(100)` — a variable-length string up to 100 characters. Shorter values don't waste space; longer values are rejected.
+  - `NOT NULL` — "every row must have a value here." Trying to insert without `name` is an error.
+- `description TEXT DEFAULT ''`
+  - `TEXT` — like `VARCHAR` but with no length limit. Useful for long free-form text.
+  - `DEFAULT ''` — if the insert doesn't provide a description, use an empty string instead of `NULL`. Notice there's no `NOT NULL`, so technically it *could* be null, but the default means it never will be in practice.
+- `created_at TIMESTAMP DEFAULT NOW()` and `updated_at TIMESTAMP DEFAULT NOW()`
+  - `TIMESTAMP` — a date + time value.
+  - `NOW()` is a built-in PostgreSQL function that returns the current moment.
+  - `DEFAULT NOW()` — "if no value given, stamp the current time automatically." Applies on insert. For `updated_at`, the backend code is responsible for re-setting it on every update (we'll write that later).
+
+#### The `tasks` Table
+
+```sql
+CREATE TABLE tasks (
+  id          SERIAL PRIMARY KEY,
+  project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title       VARCHAR(200) NOT NULL,
+  completed   BOOLEAN DEFAULT false,
+  created_at  TIMESTAMP DEFAULT NOW(),
+  updated_at  TIMESTAMP DEFAULT NOW()
+);
+```
+
+- `project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
+  - `INTEGER` — a whole number. We use `INTEGER` here (not `SERIAL`) because we're pointing at an ID that already exists in `projects`; we don't want PostgreSQL to auto-generate one.
+  - `NOT NULL` — every task must belong to a project.
+  - `REFERENCES projects(id)` — declares a **foreign key**. This says "the value in this column must match an existing `id` in the `projects` table." If you try to insert a task with `project_id = 999` but there's no project with `id = 999`, the database rejects it.
+  - `ON DELETE CASCADE` — describes what happens to this task if the referenced project is deleted. `CASCADE` = "delete me too." Without it (or with `ON DELETE RESTRICT`), the database would block the parent delete until all child tasks were removed.
+- `title VARCHAR(200) NOT NULL` — same pattern as before.
+- `completed BOOLEAN DEFAULT false` — `BOOLEAN` stores `true` or `false`. Default is `false`, so new tasks are incomplete by default.
 
 > **Key Concept: Foreign Key**
 > A foreign key is a column that references the primary key of another table. It creates a relationship: "this task **belongs to** this project." The database enforces this — you can't create a task with `project_id = 999` if project 999 doesn't exist.
@@ -96,11 +137,19 @@ The database would reject the INSERT with a foreign key violation error: `Key (p
 psql taskforge < server/src/db/schema.sql
 ```
 
+**Reading this command:**
+
+- `psql taskforge` — open psql connected to the `taskforge` database.
+- `<` is **shell input redirection**. Instead of typing SQL interactively, this says "feed the contents of `server/src/db/schema.sql` into psql's standard input, as if you typed it yourself."
+- The whole file is read and executed top-to-bottom. psql prints `CREATE TABLE` for each successful statement.
+
 Verify the tables were created:
 
 ```bash
 psql taskforge -c "\dt"
 ```
+
+**What the `\dt` does:** commands starting with `\` are **psql meta-commands** — shortcuts built into psql itself, not SQL the database understands. `\dt` stands for "describe tables" and lists every table in the current database. Other useful ones you'll meet: `\d tablename` (describe one table's columns), `\q` (quit), `\l` (list databases).
 
 You should see `projects` and `tasks` in the list.
 
@@ -144,6 +193,33 @@ DELETE FROM projects WHERE id = 1;
 -- Verify tasks were deleted too
 SELECT * FROM tasks;
 ```
+
+### Reading These Queries Line-by-Line
+
+- `INSERT INTO projects (name, description) VALUES ('My First Project', 'Learning SQL') RETURNING *;`
+  - `INSERT INTO projects (name, description)` — "add a new row to `projects`, filling in these columns." Columns you don't list take their default values (or `NULL` if no default).
+  - `VALUES ('My First Project', 'Learning SQL')` — the data, in the same order as the columns above. Strings in SQL use single quotes.
+  - `RETURNING *` — "after the insert, give me back every column of the new row." Without it, `INSERT` returns only a row count. With it, you see the generated `id`, `created_at`, and any default values — all in one query. Very useful when the backend needs the new ID immediately.
+
+- `INSERT INTO tasks (project_id, title) VALUES (1, 'Learn SELECT statements') RETURNING *;`
+  - Same shape. `project_id = 1` is legal because project 1 exists (you just created it). If you tried `project_id = 999`, the foreign key constraint would reject the insert.
+
+- `SELECT * FROM projects;`
+  - `*` means "every column." No `WHERE` clause means "every row." Use with care on large tables.
+
+- `SELECT * FROM tasks WHERE project_id = 1;`
+  - Same pattern, now with a filter: only rows whose `project_id` column equals 1.
+
+- `UPDATE tasks SET completed = true, updated_at = NOW() WHERE id = 1 RETURNING *;`
+  - `UPDATE tasks SET column = value, column = value` — modify one or more columns. Separate assignments with commas.
+  - `WHERE id = 1` — limit the update to a specific row. **Forgetting `WHERE` would update every task in the table.**
+  - `RETURNING *` — show me the row as it looks after the update.
+
+- `DELETE FROM projects WHERE id = 1;`
+  - Delete a specific project. Because we set `ON DELETE CASCADE` on `tasks.project_id`, any task belonging to project 1 is automatically deleted as a side effect.
+
+- `SELECT * FROM tasks;`
+  - Run after the delete to prove the cascade worked — the tasks table should now be empty.
 
 Exit psql: `\q`
 
@@ -207,15 +283,55 @@ export default pool;
 
 </details>
 
-**Line-by-line breakdown:**
+### Reading This File Line-by-Line
 
-| Line | What It Does | Why |
-|------|-------------|-----|
-| `import { Pool } from 'pg'` | Import the connection pool class | Pool manages multiple reusable connections |
-| `dotenv.config()` | Load `.env` file into `process.env` | Makes `DATABASE_URL` available to the code |
-| `new Pool({ connectionString: ... })` | Create a pool pointing to your database | The pool lazily opens connections as needed |
-| `pool.query('SELECT NOW()')` | Test the connection with a simple query | Fail fast — if the database is unreachable, crash immediately instead of waiting for the first API request |
-| `.catch((err: Error) => { ... process.exit(1) })` | Handle connection failure | `process.exit(1)` stops the server. No point running if the database is down. |
+```typescript
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
+```
+
+- `import { Pool } from 'pg';` — named import. `Pool` is a **class** the `pg` package exports. Think of a class as a blueprint: we'll call `new Pool(...)` below to build an actual pool object.
+- `import dotenv from 'dotenv';` — default import of the `dotenv` package.
+
+```typescript
+dotenv.config();
+```
+
+- `dotenv.config()` reads `.env` from the current working directory and copies every `KEY=VALUE` line into `process.env`. After this call, `process.env.DATABASE_URL` holds the value we set in `.env`.
+- **Order matters:** this must run **before** any code that reads env vars. That's why it's at the top of the file.
+
+```typescript
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+- `new Pool({...})` — call the `Pool` constructor. `new` is the keyword that turns a class blueprint into an actual instance.
+- `{ connectionString: process.env.DATABASE_URL }` — one configuration option. The `pg` driver parses the URL into host, port, user, password, and database name. There are many other options (`max`, `idleTimeoutMillis`, etc.), but this is enough for local dev.
+
+```typescript
+pool.query('SELECT NOW()')
+  .then(() => {
+    console.log('Connected to PostgreSQL');
+  })
+  .catch((err: Error) => {
+    console.error('Failed to connect to PostgreSQL:', err.message);
+    process.exit(1);
+  });
+```
+
+- `pool.query(sql)` — runs a SQL statement and returns a **promise** that resolves when the database responds.
+- This is **Promise chaining** syntax — an alternative to `async/await`. A promise has `.then(handler)` for success and `.catch(handler)` for failure.
+- `.then(() => { console.log(...) })` — if the query succeeded, log a success message. The `()` means "I don't care about the result value."
+- `.catch((err: Error) => { ... })` — if anything went wrong (wrong URL, database down, etc.), run this handler. `err: Error` types the parameter so TypeScript doesn't flag it as implicit `any`.
+- `console.error(...)` — like `console.log`, but writes to **stderr** (standard error stream) instead of stdout. Convention for error messages.
+- `process.exit(1)` — immediately stop the Node process with exit code `1`. Exit code `0` means success; anything else signals failure to the shell or deployment platform. "Fail fast" on a missing database is better than limping along and failing on every request.
+
+```typescript
+export default pool;
+```
+
+Default export of the single pool object so every other file (`import pool from '../db'`) gets the same instance. This is the singleton pattern — one pool for the whole app.
 
 > ⚠️ **Common Mistake: Missing Error Type**
 > Writing `.catch((err) => { ... })` without typing `err` causes: `Parameter 'err' implicitly has an 'any' type`. Always type catch parameters: `.catch((err: Error) => { ... })`.

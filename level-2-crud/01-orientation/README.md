@@ -59,6 +59,33 @@ UPDATE projects SET name = 'Renamed' WHERE id = 1;
 DELETE FROM projects WHERE id = 1;
 ```
 
+### Reading Those Five SQL Statements
+
+SQL is almost plain English. Every statement ends in `;`. Lines starting with `--` are comments (the database ignores them). Let's unpack each one.
+
+- `CREATE TABLE projects ( ... );`
+  - "Make a new table named `projects`." Everything in parentheses is the column list.
+  - `id SERIAL PRIMARY KEY` — a column named `id` with type `SERIAL` (auto-incrementing integer that starts at 1 and ticks up). `PRIMARY KEY` means "this is the unique identifier for each row; no two rows can share the same `id`, and it can't be null." The database builds an index on it automatically.
+  - `name VARCHAR(100) NOT NULL` — a column named `name` of type `VARCHAR(100)` (a variable-length string up to 100 characters). `NOT NULL` means "every row must have a value here; trying to insert without one is an error."
+
+- `INSERT INTO projects (name) VALUES ('My Project');`
+  - "Add a new row to `projects`." The `(name)` list tells PostgreSQL which columns you're filling in. The `VALUES (...)` list provides the actual data in the same order.
+  - We don't list `id` because `SERIAL` generates it automatically.
+  - Strings in SQL use single quotes: `'My Project'`. Double quotes mean something different (column/table names) — not a stylistic choice.
+
+- `SELECT * FROM projects WHERE name = 'My Project';`
+  - "Read rows from `projects`."
+  - `*` means "all columns."
+  - `WHERE name = 'My Project'` filters to rows whose `name` column equals that string. Without `WHERE`, you'd get every row in the table.
+
+- `UPDATE projects SET name = 'Renamed' WHERE id = 1;`
+  - "Modify rows in `projects`. Set the `name` column to `'Renamed'`, but only for rows where `id = 1`."
+  - **The `WHERE` clause is critical.** If you forget it, `UPDATE projects SET name = 'Renamed'` would rename every project in the table.
+
+- `DELETE FROM projects WHERE id = 1;`
+  - "Remove rows from `projects` where `id = 1`."
+  - Same warning: `DELETE FROM projects` without a `WHERE` deletes every row. PostgreSQL will happily do it — there's no "are you sure?" confirmation.
+
 Notice: SQL maps directly to CRUD:
 
 | CRUD Operation | SQL Command | HTTP Method |

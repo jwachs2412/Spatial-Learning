@@ -1,5 +1,13 @@
 # Step 5 — Building the Frontend: Projects and Tasks UI
 
+> **New to React or forgot the basics?** The JSX, hooks, events, and state lifecycle are the same as Level 1 Step 4. If `useState`, `useEffect`, `.map`, or the controlled-input pattern feel unfamiliar, revisit Level 1's "Plain-English Primer: JSX, Hooks, and Events" before continuing.
+>
+> **New to Level 2 on the frontend:**
+> - **Generic functions** like `request<T>(url): Promise<T>` — you've seen `<T>` in types before; here it generalizes a helper across every API call.
+> - **Optional chaining (`?.`)** — `options?.headers` evaluates to `undefined` if `options` is null/undefined, instead of throwing.
+> - **`...prev.tasks`** inside state updates — using spread to build a new array/object that includes every existing item plus your change. React state must be replaced, never mutated.
+> - **`e.stopPropagation()`** — stops a click from bubbling up to a clickable parent.
+
 ## Spatial Orientation
 
 ```
@@ -151,6 +159,77 @@ export const deleteTask = (id: number) =>
 
 </details>
 
+### Reading This File Line-by-Line
+
+The imports are straightforward named imports of types. The action starts with the generic helper:
+
+```typescript
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+```
+
+- `function request<T>` — `<T>` is a **generic type parameter**. Read it as "this function works for any type `T` that the caller picks." When you write `request<Project[]>(...)`, `T` is `Project[]` for that call. When you write `request<Task>(...)`, `T` is `Task`.
+- `options?: RequestInit` — `?` marks the parameter as **optional**. `RequestInit` is a built-in TypeScript type (from the DOM lib) that describes the options object `fetch` accepts: `{ method, headers, body, ... }`.
+- `: Promise<T>` — returns a promise that resolves to a value of type `T`. Whatever `T` is, the caller's `await` gets back a properly typed value.
+
+```typescript
+  const response = await fetch(`${API_URL}${url}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+```
+
+- `` `${API_URL}${url}` `` — build the full URL by concatenating the base and the relative path.
+- `{ ...options, ... }` — spread `options` into a new object so we can override fields. If the caller passed `{ method: 'POST', body: '...' }`, those land in the new object.
+- `headers: { 'Content-Type': 'application/json', ...options?.headers }` — start with the default Content-Type, then spread any caller-provided headers on top. If the caller also sets Content-Type, their version wins (later keys override earlier ones).
+- `options?.headers` — **optional chaining**. `options?.headers` evaluates to `undefined` if `options` is undefined, rather than throwing. `...undefined` spreads nothing, so it's safe.
+
+```typescript
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(errorData.error || `Request failed with status ${response.status}`);
+  }
+```
+
+- `response.ok` is `true` for 200–299, `false` otherwise.
+- `response.json().catch(() => ({ error: 'Request failed' }))` — try to parse the error body as JSON; if parsing fails (e.g., the server returned HTML or an empty body), fall back to a default shape. The `.catch(handler)` method on a promise runs `handler` if the promise rejects.
+- `throw new Error(...)` — throw so callers can `catch` it.
+
+```typescript
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json();
+}
+```
+
+- `204 No Content` — what DELETE returns on success. There's no body to parse. `return undefined as T` forces TypeScript to accept `undefined` as the generic return type. Callers who do `deleteProject(5)` use `Promise<void>` and never read the result.
+- Otherwise, parse and return the JSON body.
+
+```typescript
+export const getProjects = () => request<Project[]>('/projects');
+export const getProject = (id: number) => request<ProjectWithTasks>(`/projects/${id}`);
+```
+
+Each export is a one-line arrow function that calls `request<T>` with a URL and optionally a method/body. Because `request` is generic, each call locks in a specific `T`:
+
+- `request<Project[]>('/projects')` — the returned promise is typed as `Promise<Project[]>`. Callers get autocomplete on `project.name` etc.
+- `request<ProjectWithTasks>(\`/projects/${id}\`)` — templated URL with the project ID.
+
+```typescript
+export const createProject = (data: CreateProjectRequest) =>
+  request<Project>('/projects', { method: 'POST', body: JSON.stringify(data) });
+```
+
+- Takes `data` of type `CreateProjectRequest`.
+- Passes options as the second argument: `method: 'POST'` and `body: JSON.stringify(data)`.
+- `JSON.stringify(obj)` converts a JavaScript object to a JSON string. `fetch` requires the body to be a string.
+
+Same shape for `updateProject`, `deleteProject`, `createTask`, `updateTask`, `deleteTask`. The genericized `request` helper is the whole reason these are one-liners instead of nine separate 10-line functions.
+
 **Key pattern: Generic `request` helper.** Instead of repeating `fetch` + headers + error handling in 9 functions, we extract it into one helper. This is the DRY principle (Don't Repeat Yourself) applied to API calls.
 
 ---
@@ -278,6 +357,36 @@ export function ProjectList({ projects, onSelect, onDelete }: Props) {
 
 </details>
 
+### Reading ProjectForm and ProjectList
+
+**ProjectForm** follows the exact shape of Level 1's EntryForm: controlled inputs, async submit handler with try/catch/finally, reset on success. If this feels unfamiliar, revisit Level 1 Step 4's walkthrough of EntryForm. The only new detail: `maxLength={100}` on the name input is an HTML attribute that stops typing past 100 characters — a client-side reinforcement of the server's `VARCHAR(100)` check.
+
+**ProjectList** is a straight `.map` over the projects array, with one subtle twist: the **nested click handlers**.
+
+```tsx
+<div
+  key={project.id}
+  className="project-card"
+  onClick={() => onSelect(project.id)}
+>
+  <div className="project-card-header">
+    <h3>{project.name}</h3>
+    <button
+      className="delete-btn"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (confirm('Delete this project and all its tasks?')) {
+          onDelete(project.id);
+        }
+      }}
+    >
+```
+
+- The whole card has `onClick` — clicking anywhere on it opens that project.
+- The delete button is inside the card and has its own `onClick`. Without intervention, clicking delete would fire BOTH handlers: first the button's (bubble up), then the card's (open the project the user is trying to delete).
+- `e.stopPropagation()` stops the click from bubbling up to parent elements. Now only the button's handler runs.
+- `confirm('...')` — a built-in browser function that opens a native "OK / Cancel" dialog and returns `true` or `false`. Synchronous — execution pauses until the user responds.
+
 > **Key pattern: `e.stopPropagation()`**
 > The delete button is inside a clickable card. Without `stopPropagation()`, clicking delete would ALSO trigger the card's `onClick` (selecting the project). `stopPropagation()` prevents the click from bubbling up to the parent.
 
@@ -359,6 +468,104 @@ export function TaskItem({ task, onUpdate, onDelete }: Props) {
 ```
 
 </details>
+
+### Reading TaskItem Line-by-Line
+
+TaskItem has the most new React patterns in Level 2. Take it slow.
+
+```tsx
+const [isEditing, setIsEditing] = useState(false);
+const [editTitle, setEditTitle] = useState(task.title);
+```
+
+Two local state values: a flag for "am I in edit mode right now" and a working copy of the title while editing.
+
+```tsx
+const handleToggle = () => {
+  onUpdate(task.id, { completed: !task.completed });
+};
+```
+
+- `!task.completed` — the `!` operator flips a boolean. So this updates the task with the opposite of its current completed value.
+- We don't await `onUpdate` here because we don't need anything back; we just fire-and-forget the update.
+
+```tsx
+const handleSaveEdit = () => {
+  if (editTitle.trim() && editTitle.trim() !== task.title) {
+    onUpdate(task.id, { title: editTitle.trim() });
+  }
+  setIsEditing(false);
+};
+```
+
+- Only persist if the trimmed title is non-empty **and** actually different from the original (no pointless API call for a noop edit).
+- Always leave edit mode when saving, whether or not we persisted.
+
+```tsx
+<div className={`task-item ${task.completed ? 'completed' : ''}`}>
+```
+
+Template literal for the `className`. `task.completed ? 'completed' : ''` adds the `completed` class conditionally. CSS then uses that class to strike through the text.
+
+```tsx
+<input
+  type="checkbox"
+  checked={task.completed}
+  onChange={handleToggle}
+/>
+```
+
+A **controlled checkbox**. `checked={task.completed}` keeps the checkbox in sync with the task's completion state. When the user clicks, `onChange` fires and we toggle via the parent.
+
+```tsx
+{isEditing ? (
+  <input ... />
+) : (
+  <span ...>
+    {task.title}
+  </span>
+)}
+```
+
+**Ternary for conditional rendering.** When you need to choose between two different elements (not just show/hide), use `condition ? <A /> : <B />`. Wrap each branch in parentheses so JSX and the ternary operator don't get tangled up.
+
+```tsx
+<input
+  type="text"
+  value={editTitle}
+  onChange={(e) => setEditTitle(e.target.value)}
+  onBlur={handleSaveEdit}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') handleSaveEdit();
+    if (e.key === 'Escape') {
+      setEditTitle(task.title);
+      setIsEditing(false);
+    }
+  }}
+  autoFocus
+  className="edit-input"
+/>
+```
+
+Four event handlers working together to give the edit input "desktop app" feel:
+
+- `onChange` — update state on every keystroke. Standard controlled input.
+- `onBlur` — fires when the input loses focus (user clicks elsewhere). We save.
+- `onKeyDown` — fires when a key is pressed down. `e.key` is the key's name as a string: `'Enter'`, `'Escape'`, `'a'`, `'ArrowLeft'`, etc.
+  - Enter → save.
+  - Escape → revert the working copy to the original title and exit edit mode.
+- `autoFocus` — a boolean attribute. React focuses the input as soon as it mounts, so the user can start typing immediately.
+
+```tsx
+<span
+  className="task-title"
+  onDoubleClick={() => setIsEditing(true)}
+>
+  {task.title}
+</span>
+```
+
+`onDoubleClick` — native browser event for a double-click. Standard pattern for "inline edit on double-click." Enters edit mode, which triggers the ternary to swap the span for the input on the next render.
 
 ### TaskForm, TaskList, ProjectDetail
 
@@ -623,9 +830,102 @@ export default App;
 
 </details>
 
+### Reading App.tsx Line-by-Line
+
+App owns all the state. Every child component receives data + callbacks as props and never touches API calls or state directly. Let's walk the tricky parts.
+
+```tsx
+import * as api from './services/api';
+```
+
+**Namespace import.** Instead of `import { getProjects, createProject, ... } from './services/api'` with nine names to list, we pull everything into one namespace and call `api.getProjects()`, `api.createProject(...)`. Reads well at the call site.
+
+```tsx
+const [projects, setProjects] = useState<Project[]>([]);
+const [selectedProject, setSelectedProject] = useState<ProjectWithTasks | null>(null);
+```
+
+- `Project[]` — array of projects, the list-view data.
+- `ProjectWithTasks | null` — **union type**. The state is either a full project (with its tasks) or `null` (no project selected). The `| null` is how we model "sometimes present, sometimes not."
+
+```tsx
+useEffect(() => {
+  loadProjects();
+}, []);
+```
+
+Empty dependency array → run once on mount. Calls `loadProjects` which fetches and stores the project list. (Recall from Level 1: an async function must be defined inside or adjacent to the effect because the effect callback itself can't be async.)
+
+```tsx
+const handleCreateProject = async (data: CreateProjectRequest) => {
+  const newProject = await api.createProject(data);
+  setProjects((prev) => [newProject, ...prev]);
+};
+```
+
+- Call the API, get the saved project back (with id and timestamps).
+- `setProjects((prev) => [newProject, ...prev])` — **functional updater**. Uses the latest state, not a stale closure. `[newProject, ...prev]` puts the new one at the top.
+
+```tsx
+const handleDeleteProject = async (id: number) => {
+  await api.deleteProject(id);
+  setProjects((prev) => prev.filter((p) => p.id !== id));
+  if (selectedProject?.id === id) {
+    setSelectedProject(null);
+  }
+};
+```
+
+- `prev.filter((p) => p.id !== id)` — returns a new array with every project whose id is NOT the deleted one. `.filter((item) => condition)` is an array method that keeps items where `condition` returns true.
+- `selectedProject?.id === id` — **optional chaining** again. If `selectedProject` is `null`, `selectedProject?.id` evaluates to `undefined` (not a crash), and `undefined === id` is false. So the `if` safely handles both "no project selected" and "different project selected."
+- If the deleted project happened to be the one currently open, close the detail view.
+
+```tsx
+const handleCreateTask = async (title: string) => {
+  if (!selectedProject) return;
+  const newTask = await api.createTask(selectedProject.id, { title });
+  setSelectedProject((prev) =>
+    prev ? { ...prev, tasks: [...prev.tasks, newTask] } : prev
+  );
+};
+```
+
+- `if (!selectedProject) return;` — guard clause. Can't add a task if no project is open.
+- `setSelectedProject((prev) => prev ? {...} : prev)` — the updater function always accepts and returns a value, but we only build a new object when `prev` is non-null.
+- `{ ...prev, tasks: [...prev.tasks, newTask] }` — **nested spread**. Copy every field of `prev` into a new object; then override `tasks` with a new array containing every existing task plus the new one. React requires a new object reference for state changes to register.
+
+```tsx
+const handleUpdateTask = async (id: number, data: {...}) => {
+  const updatedTask = await api.updateTask(id, data);
+  setSelectedProject((prev) =>
+    prev
+      ? { ...prev, tasks: prev.tasks.map((t) => (t.id === id ? updatedTask : t)) }
+      : prev
+  );
+};
+```
+
+- `prev.tasks.map((t) => t.id === id ? updatedTask : t)` — walk the tasks array. For the task whose id matches, substitute the updated version; leave all others unchanged. `.map` always produces a new array of the same length.
+
+```tsx
+{selectedProject ? (
+  <ProjectDetail ... />
+) : (
+  <>
+    <ProjectForm onSubmit={handleCreateProject} />
+    <ProjectList ... />
+  </>
+)}
+```
+
+- Ternary in JSX: if a project is selected, render `<ProjectDetail />`; otherwise render the list view.
+- `<>...</>` is a **React fragment** — a no-op wrapper. When you need to return multiple elements from one branch but don't want to add a real `<div>`, wrap them in `<>` and `</>`. Fragments don't show up in the DOM.
+
 ---
 
 ## 5. Add Styles
+
+The CSS here follows the same dark-theme pattern you saw in Level 1. If you need a refresher on how CSS rules are built (selectors, properties, units, colors), see Level 1 Step 4's "How to Read This CSS" section. Nothing new in Level 2's stylesheet — just different class names for different components.
 
 <details>
 <summary>See App.css (dark theme)</summary>

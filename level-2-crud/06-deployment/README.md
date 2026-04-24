@@ -78,10 +78,19 @@ You have several options. Choose based on your needs:
 psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
 ```
 
+**Reading this command:**
+
+- `psql "postgresql://..."` — when `psql` receives a full connection URL as its first argument, it connects over the internet to the remote database (instead of to a local one). The URL encodes host, port, username, password, and database name.
+- **Quote the URL** with double quotes. URLs often contain `@`, `?`, or `&` — characters your shell treats specially unless quoted.
+- `<` — shell input redirection: "pipe the contents of this file into psql as if I typed them." Same technique you used in Step 3, just pointed at a remote database now.
+- Result: every `CREATE TABLE` and `CREATE INDEX` in `schema.sql` runs against the Supabase (or Neon, or Render) database. You just set up your production schema.
+
 Verify:
 ```bash
 psql "YOUR_SUPABASE_CONNECTION_STRING" -c "\dt"
 ```
+
+- `-c "\dt"` — run the `\dt` meta-command and exit. Lists all tables in the remote database.
 
 You should see `projects` and `tasks` tables.
 

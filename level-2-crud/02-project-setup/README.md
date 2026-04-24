@@ -13,6 +13,8 @@ task-forge/          ← YOU ARE CREATING THIS
 
 This step adds a new dimension: a database running on your machine. By the end, you'll have PostgreSQL installed, a database created, and both frontend and backend scaffolded.
 
+> **Already know this from Level 1?** The terminal, npm, git, tsconfig, and `.gitignore` pieces are identical to Level 1 Step 2 — all those walkthroughs apply here. This lesson only unpacks **new** things: the `pg` and `dotenv` packages, PostgreSQL install, and the `.env` file.
+
 ---
 
 ## 1. Create the Project Structure
@@ -62,6 +64,14 @@ cd server
 npm init -y
 ```
 
+**Reading that first line carefully:** the `{db,routes,middleware,types}` is **shell brace expansion**. Your shell (bash or zsh) rewrites it into four separate words before running the command, so the one-liner is equivalent to:
+
+```bash
+mkdir -p server/src/db server/src/routes server/src/middleware server/src/types
+```
+
+`-p` means "create parent folders if they don't exist," so all four leaf folders plus `server/` and `server/src/` appear in one shot.
+
 ### Install Dependencies
 
 ```bash
@@ -72,15 +82,12 @@ npm install express cors pg dotenv
 npm install typescript ts-node nodemon
 ```
 
-| Package | What It Does |
-|---------|-------------|
-| `express` | Web framework for handling HTTP requests |
-| `cors` | Enables cross-origin requests from frontend |
-| `pg` | PostgreSQL client for Node.js — sends SQL queries to the database |
-| `dotenv` | Reads `.env` files and loads them into `process.env` |
-| `typescript` | Compiles TypeScript to JavaScript |
-| `ts-node` | Runs TypeScript directly (for development) |
-| `nodemon` | Auto-restarts server when files change |
+**What's new compared to Level 1:** two packages, `pg` and `dotenv`.
+
+- **`pg`** — the Node.js PostgreSQL driver. It's the thing that actually sends SQL strings over a network socket to your database process and streams the results back. Without it, Node has no idea how to talk to PostgreSQL. You'll use two of its exports throughout Level 2: `Pool` (a pool of reusable database connections) and `Client` (a single connection, used for one-off scripts).
+- **`dotenv`** — a tiny library that reads a `.env` file from disk and copies every `KEY=VALUE` line into `process.env`. Without it, `process.env.DATABASE_URL` would be `undefined` during development (your shell only sets env vars you explicitly export). You call `dotenv.config()` once at the top of your server entry file.
+
+The other five packages are the same Level 1 roster: `express`, `cors`, `typescript`, `ts-node`, `nodemon`. If you need a refresher on those, see Level 1 Step 2.
 
 ### Install Type Definitions
 
@@ -184,6 +191,13 @@ brew install postgresql@16
 brew services start postgresql@16
 ```
 
+**Reading these commands:**
+
+- `psql` is PostgreSQL's built-in command-line client — a terminal-based way to talk to a database. `psql --version` asks it to print its version number. If Postgres isn't installed, you'll see `command not found` instead.
+- `brew` is **Homebrew**, the go-to package manager for macOS. It's how you install system-level programs (not to be confused with `npm`, which installs Node packages inside a project).
+- `brew install postgresql@16` downloads and installs PostgreSQL version 16. The `@16` pins to a specific major version so upgrades don't surprise you.
+- `brew services start postgresql@16` launches PostgreSQL as a background service that starts with your computer. Your backend connects to it over port 5432 (Postgres's default).
+
 If `brew services start` doesn't work, try:
 ```bash
 brew services restart postgresql@16
@@ -195,6 +209,11 @@ brew services restart postgresql@16
 psql postgres -c "SELECT NOW();"
 ```
 
+**Reading this:**
+
+- `psql postgres` — "open a `psql` session connected to the database named `postgres`." `postgres` is a default database that every install ships with; it's the safe one to connect to just to prove things work.
+- `-c "SELECT NOW();"` — the `-c` flag means "run this one SQL command and exit" (versus opening an interactive shell). `SELECT NOW();` asks Postgres for the current time.
+
 You should see the current timestamp. If you get "connection refused," PostgreSQL isn't running — restart it with `brew services restart postgresql@16`.
 
 ### Create the TaskForge Database
@@ -203,10 +222,17 @@ You should see the current timestamp. If you get "connection refused," PostgreSQ
 createdb taskforge
 ```
 
+**What this is:** `createdb` is another small command-line tool Postgres installs alongside `psql`. It's a wrapper that runs `CREATE DATABASE taskforge;` for you. After this, a new, empty database named `taskforge` exists inside your Postgres server — think of it as a fresh folder that will hold all the tables you're about to create.
+
 Verify it exists:
 ```bash
 psql taskforge -c "SELECT 'TaskForge database connected!' AS status;"
 ```
+
+**Reading this:**
+
+- `psql taskforge` connects to the `taskforge` database this time (not `postgres`). If Postgres can't find a database named `taskforge`, the command fails — that's a useful "did it actually get created?" check.
+- `SELECT 'TaskForge database connected!' AS status;` — a tiny SQL query. `SELECT <literal>` returns that literal value as a one-row result. `AS status` names the output column `status`. It's a no-op on the data — we're using it as a "hello" test.
 
 Expected output: `TaskForge database connected!`
 
@@ -229,11 +255,18 @@ DATABASE_URL=postgresql://localhost:5432/taskforge
 CORS_ORIGIN=http://localhost:5173
 ```
 
-| Variable | What It Is | Why It's Here |
-|----------|-----------|---------------|
-| `PORT` | Port the backend runs on | Deployment platforms set this automatically |
-| `DATABASE_URL` | PostgreSQL connection string | Your backend uses this to find the database |
-| `CORS_ORIGIN` | Allowed frontend origin | Prevents unauthorized cross-origin requests |
+### Reading the `.env` File
+
+A `.env` file is plain text. One variable per line, in the form `KEY=VALUE`. No quotes around values, no spaces around `=`. Lines starting with `#` are comments.
+
+- `PORT=3001` — the port your Express server will listen on. Locally we pick 3001; hosting platforms override this automatically.
+- `DATABASE_URL=postgresql://localhost:5432/taskforge` — the **connection string**. Let's unpack each piece:
+  - `postgresql://` — the protocol. Tells the `pg` driver "this is a PostgreSQL URL."
+  - `localhost` — the host. We're connecting to Postgres running on this machine. In production this'll be a hostname like `dpg-xyz.oregon-postgres.render.com`.
+  - `:5432` — the port Postgres listens on (its default).
+  - `/taskforge` — the database name. One Postgres server can host many databases; the path picks which one to use.
+  - Notice: no username or password for local dev. On macOS, the default install trusts your OS user — in production, the URL includes credentials: `postgresql://username:password@host:5432/dbname`.
+- `CORS_ORIGIN=http://localhost:5173` — the frontend URL we'll allow requests from. Same rule as Level 1: no trailing slash.
 
 > ⚠️ **Important:** The `.env` file is in your `.gitignore`. It should NEVER be committed to Git. It contains credentials that change between environments (development vs production).
 
