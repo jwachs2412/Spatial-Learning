@@ -18,6 +18,30 @@ Before you write any code, you need to understand **where** code runs and **how*
 
 ---
 
+## Words We'll Use a Lot — Define Them Once, Use Them Forever
+
+Before diving in, here's plain-English shorthand for the vocabulary that shows up in every lesson. Read this once — you'll meet every one of these again.
+
+- **Code** — instructions written in a programming language. A text file full of words and symbols that a computer reads and acts on.
+- **Program / App** — a collection of code files that, when run, does something useful (a website, a calculator, a game).
+- **Run** — telling the computer to start executing your code. You "run" the backend, you "run" a script.
+- **Browser** — the program you're using to read this (Chrome, Firefox, Safari). It fetches and displays web pages.
+- **Server** — a program that listens for requests over the network and sends responses. Can also refer to the physical computer that program runs on.
+- **Backend** — code that runs on the server. The part users never see.
+- **Frontend** — code that runs in the browser. What users see and interact with.
+- **localhost** — a nickname your computer uses for itself. When you type `localhost:3001` in the browser, you're saying "talk to a program running on this very machine at port 3001." Not connected to the internet in any way.
+- **Port** — a numbered "entrance" on your computer. Different programs listen on different ports so they don't collide (more on this below).
+- **Endpoint** — a specific URL on a server that does a specific thing. `/api/entries` is one endpoint; `/api/health` is another. "URL" and "endpoint" are often used interchangeably for backend routes.
+- **URL** — the address of something on the web, like `http://localhost:3001/api/entries`. Made up of a protocol (`http`), a host (`localhost`), an optional port (`3001`), and a path (`/api/entries`).
+- **API (Application Programming Interface)** — a set of endpoints a program offers to other programs. Your backend exposes an API so the frontend can talk to it.
+- **Request** — a message the client sends to the server ("please give me the entries" or "please save this new entry").
+- **Response** — what the server sends back ("here are the entries" or "saved, here's the new one").
+- **Data** — any information your app works with: a user's name, a list of entries, a score, a photo. On the wire, it's text; in code, it's organized into structures.
+
+You don't have to memorize these. They'll show up so often that repetition will do the memorization for you.
+
+---
+
 ## The Client-Server Model
 
 > **Key Concept: Client-Server Architecture**
@@ -183,6 +207,21 @@ The nested resource (`/recipes/3/ingredients`) shows that ingredients belong to 
 }
 ```
 
+### Reading That JSON Character-by-Character
+
+Every symbol in that snippet matters. Here's what each one is doing:
+
+- `{` at the very start — "an object begins here." An object is a bag of named values.
+- `}` at the very end — "the object ends here." Everything between the curly braces is the object's content.
+- `"id"`, `"mood"`, `"energy"` — these are **keys** (sometimes called "field names"). They are always in double quotes in JSON.
+- `:` — separates a key from its value. Read it as "equals" or "is."
+- `1`, `4` — numbers. No quotes.
+- `"happy"`, `"Shipped a feature today!"`, `"2025-01-15"` — strings (text). Strings are always in double quotes.
+- `,` — separates one key/value pair from the next. There is no comma after the last pair — that would be a syntax error.
+- Newlines and indentation — purely cosmetic. JSON doesn't care about whitespace. The whole thing could be on one line; it's formatted for humans.
+
+So the object has five fields: `id` is the number 1, `mood` is the string "happy", `energy` is the number 4, `note` is a longer string, and `date` is a string that happens to look like a date (JSON has no real "date" type, so dates are stored as strings).
+
 ### JSON Rules (These Will Bite You)
 
 | Rule | Valid | Invalid | Why |
@@ -257,6 +296,24 @@ app.use(cors({
   origin: 'http://localhost:5173'  // No trailing slash!
 }));
 ```
+
+### Reading That Snippet Line-by-Line
+
+Even if you've never seen code before, every piece of that four-line example is nameable:
+
+- `import cors from 'cors';`
+  - `import` is a command that reads "pull code from another file or package so I can use it here."
+  - `cors` is the name we're giving to whatever we imported. We picked this name ourselves — we could have written `import anyNameWeWant from 'cors'` and it would still work.
+  - `from 'cors'` is the source. `'cors'` (in quotes) is the name of an npm package — a pre-made bundle of code that someone else wrote and published. We'll install it with `npm install cors` later.
+  - The `;` at the end is a **semicolon**. It marks the end of a statement in JavaScript/TypeScript. (Some code styles skip semicolons entirely; both are valid.)
+- `app.use(cors({ ... }));`
+  - `app` is an Express application object — we'll create it in Step 3. Think of it as "our backend server, represented as an object in code."
+  - `.use(...)` means "run this code for every incoming request." You'll see this pattern repeatedly.
+  - `cors({ ... })` is a **function call**. `cors` is the thing we imported; the parentheses `()` mean "call it now." The curly-brace object inside `{ ... }` is the single argument we're handing to that function.
+  - `{ origin: 'http://localhost:5173' }` is an **object literal** — a temporary object made on the spot with one field, `origin`, set to the string `'http://localhost:5173'`.
+  - `// No trailing slash!` is a **comment**. Anything after `//` on a line is ignored by the computer; it's a note for humans reading the code.
+
+Don't panic if this feels dense. You'll see the same shapes (imports, function calls, object literals) hundreds of times across Level 1. Repetition will lock them in.
 
 > ⚠️ **Common Mistake: Trailing Slash in CORS Origin**
 > `'http://localhost:5173/'` is NOT the same as `'http://localhost:5173'`. The browser sends origins **without** a trailing slash. If your CORS config includes one, every request gets silently blocked. This mistake has derailed countless first deployments. Always omit the trailing slash.

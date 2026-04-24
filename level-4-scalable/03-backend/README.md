@@ -76,6 +76,146 @@ data-dash/
 
 ---
 
+## Before We Start: A Plain-English Syntax Primer
+
+Pretend you have never written code before. Every snippet in this lesson is built from the same small set of JavaScript and TypeScript building blocks. Read through this once. When you see these shapes later, you will know exactly what they mean instead of glossing over them.
+
+### Variables: `const` and `let`
+
+```typescript
+const name = 'DataDash';   // "name" points at this string forever
+let counter = 0;            // "counter" can be reassigned later
+```
+
+- `const` = "I will never reassign this name to a different value." Use it by default.
+- `let` = "I need to reassign this later (inside a loop, for example)."
+- There is also `var` — ignore it. Modern code uses `const` and `let`.
+
+### Strings and Template Literals
+
+```typescript
+const normal = 'Hello';
+const template = `Hello, ${name}!`;   // backticks, with ${...} embedded
+```
+
+Backticks (`` ` ``) let you insert a variable or expression directly into a string using `${...}`. The old way was `'Hello, ' + name + '!'`. Template literals are cleaner and used everywhere in this lesson.
+
+### Functions: Three Forms You Will See
+
+```typescript
+// 1. Classic function declaration
+function add(a, b) {
+  return a + b;
+}
+
+// 2. Arrow function assigned to a variable
+const add = (a, b) => a + b;
+
+// 3. Anonymous arrow passed directly as an argument
+array.map((item) => item * 2);
+```
+
+All three do the same kind of thing: take inputs, return an output. Arrow functions (`=>`) are shorter and very common when a function is passed as an argument.
+
+### Arrays and Objects
+
+```typescript
+const list = ['a', 'b', 'c'];           // an array — ordered list
+const user = { name: 'Jo', age: 30 };   // an object — named fields
+```
+
+- Access array items by index: `list[0]` → `'a'`.
+- Access object fields by name: `user.name` → `'Jo'`.
+
+### Destructuring: Pulling Fields Out
+
+```typescript
+const { name, age } = user;             // same as name = user.name; age = user.age
+const [first, second] = list;           // same as first = list[0]; second = list[1]
+```
+
+When you see `const { startDate, endDate } = req.query`, that is just "pull `startDate` and `endDate` out of `req.query` and give them their own names."
+
+### The Spread Operator: `...`
+
+```typescript
+const more = [...list, 'd'];            // copies list and appends 'd'
+const extended = { ...user, role: 'admin' };  // copies user, adds role
+```
+
+`...` copies everything from one array/object into another. In this lesson you will see `[...params, limit, offset]` — that means "take the existing `params` array and append `limit` and `offset` at the end."
+
+### `async` / `await` and Promises
+
+A **promise** represents "a value that will arrive later" — usually because it depends on the database, the network, or the disk. Any function marked `async` automatically returns a promise. Inside that function, `await` pauses execution until a promise resolves.
+
+```typescript
+async function getUser(id) {
+  const user = await pool.query(...);   // pause here until the DB answers
+  return user;                           // this becomes the promise's value
+}
+```
+
+Without `await`, you would get a promise object, not the actual result. Almost every database, HTTP, or file operation in Node.js returns a promise, so you will see `await` constantly.
+
+### Modules: `import` and `export`
+
+```typescript
+// In file `math.ts`:
+export function add(a, b) { return a + b; }   // named export
+export default function multiply(a, b) { return a * b; }  // default export
+
+// In another file:
+import multiply, { add } from './math';        // default + named
+import * as math from './math';                 // everything as a namespace
+```
+
+- **Named exports**: many per file, imported with curly braces: `import { add }`.
+- **Default export**: one per file, imported without curly braces: `import multiply`.
+- **Namespace import** (`* as`): grabs everything and lets you call `math.add(...)`.
+
+### TypeScript in 30 Seconds
+
+TypeScript is JavaScript with **types**. A type is a label that says "this value is a string" or "this function returns a number." TypeScript checks your types at build time and refuses to compile if they don't match — catching bugs before they ship.
+
+```typescript
+function greet(name: string): string {          // takes a string, returns a string
+  return `Hello, ${name}`;
+}
+
+const count: number = 5;
+const names: string[] = ['Jo', 'Sam'];           // array of strings
+const user: { name: string; age: number } = { name: 'Jo', age: 30 };
+```
+
+You will also see:
+
+- `: void` — "this function returns nothing."
+- `Promise<X>` — "a promise that will resolve to a value of type X."
+- `T | null` — "either a T or null."
+- `<T>` on a function — **generic**, meaning "works with whatever type you pass in."
+
+Don't panic if types feel noisy at first. They are comments that the compiler actually checks.
+
+### Request, Response, Next (Express basics)
+
+Every Express middleware and route handler gets three arguments:
+
+- `req` — the incoming request (URL, query params, body, headers).
+- `res` — the response you send back (status code, JSON body).
+- `next` — a function you call to say "I'm done; hand the request to the next middleware."
+
+```typescript
+function myMiddleware(req, res, next) {
+  // inspect or modify req/res
+  next();   // pass along
+}
+```
+
+That's enough foundation. From here on, every code block will be followed by a plain-English walkthrough that explains what each piece is actually doing.
+
+---
+
 ## 1. Database Schema
 
 > **Key Concept: Schema as Contract**
@@ -124,6 +264,22 @@ CREATE INDEX idx_events_created_at ON analytics_events(created_at);
 ```
 
 </details>
+
+### Reading This SQL Line-by-Line
+
+SQL (Structured Query Language) is the language you speak to a relational database. It is almost plain English. Here is what every piece above is saying:
+
+- `-- anything after two dashes is a comment.` PostgreSQL ignores comments; they are only for humans reading the file.
+- `DROP TABLE IF EXISTS analytics_events;` — "If a table named `analytics_events` already exists, delete it." The `IF EXISTS` part prevents an error the first time you run this (when the table doesn't exist yet).
+- `CREATE TABLE analytics_events ( ... );` — "Make a new table called `analytics_events` with these columns." Everything inside the parentheses is the list of columns and their rules.
+- Each column is written as `column_name TYPE CONSTRAINTS`:
+  - `id SERIAL PRIMARY KEY` — a column named `id` of type `SERIAL` (auto-incrementing integer). `PRIMARY KEY` means "this is the unique identifier for each row; PostgreSQL should enforce uniqueness and build an index on it automatically."
+  - `event_type VARCHAR(50) NOT NULL` — a variable-length string up to 50 characters. `NOT NULL` means "every row must have a value; inserting a row without this field is an error."
+  - `value DECIMAL(10,2) DEFAULT 0` — a decimal number with up to 10 digits total, 2 of which come after the decimal point. `DEFAULT 0` means "if the insert doesn't specify a value, use 0."
+  - `created_at TIMESTAMP NOT NULL DEFAULT NOW()` — a timestamp column. `NOW()` is a built-in PostgreSQL function that returns the current time. `DEFAULT NOW()` means "if no value is given, stamp the current time automatically."
+- `CREATE INDEX idx_events_type ON analytics_events(event_type);` — "Build an index on the `event_type` column so filtering by it is fast." The name `idx_events_type` is just a label; by convention it is `idx_<table>_<column>` so you can spot indexes at a glance.
+
+Every semicolon (`;`) ends a statement. PostgreSQL runs them one by one.
 
 **Why these choices matter:**
 
@@ -198,14 +354,39 @@ const pool = new Pool({
 export default pool;
 ```
 
-**Line-by-line breakdown:**
+### Reading This File Line-by-Line
 
-| Line | What it does | Why it matters |
-|------|-------------|----------------|
-| `import { Pool } from 'pg'` | Imports the pool class from the `pg` PostgreSQL driver | `Pool` is the only thing you should import from `pg` for app code. `Client` is for one-off scripts. |
-| `dotenv.config({ path: '../.env' })` | Loads environment variables from `.env` file | The path is relative to where the script runs — from `server/`, the `.env` file lives one directory up. |
-| `new Pool({ connectionString: ... })` | Creates the pool, parsing the URL into host/port/db/user/password | One pool per application. Export it as a singleton so every file shares the same pool. |
-| `export default pool` | Makes the pool importable from any other file | All services and routes will import this and call `pool.query(...)`. |
+Even though it's only a few lines, every symbol here is meaningful. Let's unpack each piece:
+
+- `import { Pool } from 'pg';`
+  - `import` = "I want to use something from another file or package."
+  - `{ Pool }` = "Give me the `Pool` export by name." (curly braces mean **named import**.)
+  - `from 'pg'` = "Get it from the npm package called `pg`" — the PostgreSQL driver for Node.js.
+  - Think of `Pool` as a **class** — a blueprint for making pool objects. You'll call `new Pool(...)` below to actually build one.
+
+- `import dotenv from 'dotenv';`
+  - No curly braces, so this is a **default import**. `dotenv` is the package's default export.
+  - `dotenv` is a tool for loading environment variables from a `.env` file into `process.env`.
+
+- `dotenv.config({ path: '../.env' });`
+  - `dotenv.config(...)` is a function call. You're asking the `dotenv` library to read the file and populate `process.env`.
+  - `{ path: '../.env' }` is an **object literal** passed as the argument — an object with one field, `path`, pointing two levels up (because the script runs from `server/`, but `.env` lives in the project root).
+  - After this line runs, `process.env.DATABASE_URL` contains the value from the `.env` file.
+
+- `const pool = new Pool({ connectionString: process.env.DATABASE_URL });`
+  - `const pool` = "create a constant named `pool`" that we'll never reassign.
+  - `new Pool(...)` = "build a new Pool object from the `Pool` class." `new` is how you create an instance of a class.
+  - The argument is a configuration object. `connectionString` is one of many options `Pool` accepts; we're telling it, "here's the URL of the database — parse host, port, username, password, and database name out of it."
+  - `process.env` is a built-in Node object containing all environment variables. `process.env.DATABASE_URL` reads the one named `DATABASE_URL`.
+
+- `export default pool;`
+  - "Make `pool` the default export of this file."
+  - Any other file can now write `import pool from './db/index'` (no curly braces — remember, no braces = default import) and get this exact same pool object.
+  - There's **one pool for the whole app**, shared by every service and route. This is crucial — if each file made its own pool, you'd have many disconnected pools competing for PostgreSQL's connection limit.
+
+### Why This Matters
+
+A single shared pool is a classic **singleton** pattern: one instance, reused everywhere. The moment you import `pool` in another file, Node's module system gives you back the exact same object — it doesn't run this file again. So `pool.query(...)` calls from `services/analyticsService.ts` and `routes/analytics.ts` all funnel through the same connection pool.
 
 ---
 
@@ -408,17 +589,288 @@ seed().catch((err) => {
 });
 ```
 
-**Walking through the important parts:**
+### Reading This Script Line-by-Line
 
-| Section | What it does | Why it matters |
-|---------|-------------|----------------|
-| `randomItem<T>(arr: T[]): T` | Generic helper that picks one random item | The `<T>` makes it type-safe for any array — `randomItem(COUNTRIES)` returns `string`, `randomItem([1,2,3])` returns `number`. |
-| `weightedEventType()` | Returns event types in realistic proportions | Roll a die between 0 and 1; under 0.55 is `page_view`, 0.55–0.75 is `click`, etc. The boundaries are the cumulative probability. |
-| `for (let day = DAYS - 1; day >= 0; day--)` | Outer loop counts down so the most recent day is `day = 0` | This makes the dates contiguous and ending today. |
-| `isWeekend ? 0.6 : 1` | Reduce weekend traffic by 40% | Mimics real B2B SaaS traffic patterns. |
-| `values.push(\`($${paramIndex}, ...)\`)` | Builds a multi-row VALUES clause | One `INSERT INTO ... VALUES (...), (...), (...)` is much faster than many separate inserts. |
-| `params.push(eventType, ...)` | Pushes raw values into a parallel array | Values are passed separately, never interpolated into the SQL string. **This prevents SQL injection.** |
-| `console.table(summary.rows)` | Pretty-prints the result as a table | Quick sanity check that the data looks plausible. |
+This is a lot of code. We'll walk through it in five chunks — **Imports**, **Constants**, **Helpers**, **The Main Loop**, and **Cleanup**. Take your time on each one.
+
+#### Chunk 1: Imports
+
+```typescript
+import pool from './index';
+```
+
+- `import pool` — no curly braces, so this is a **default import** of whatever `./index.ts` exported with `export default`. That was the pool we just built.
+- `from './index'` — relative path to a sibling file in the same folder. The `.ts` extension is implied.
+
+After this line, `pool` in this file is the exact same pool object shared with the rest of the app.
+
+#### Chunk 2: Constants
+
+```typescript
+const DAYS = 90;
+const EVENTS_PER_DAY_MIN = 40;
+const EVENTS_PER_DAY_MAX = 80;
+
+const EVENT_TYPES = ['page_view', 'signup', 'purchase', 'click'];
+// ...
+```
+
+- `const` declares a constant you won't reassign.
+- **UPPER_SNAKE_CASE** is a convention for "this is a configuration value that's the same forever" — it signals to readers, "don't change me mid-run."
+- `['page_view', ...]` is an **array literal** — square brackets, comma-separated values. This one happens to be an array of strings.
+
+Why pull these out as constants? Two reasons:
+1. **One source of truth.** If you want to change the number of days later, you edit one line.
+2. **Readability.** `EVENTS_PER_DAY_MAX` at a call site is self-documenting. `80` is not.
+
+#### Chunk 3: Helpers
+
+```typescript
+function randomItem<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+```
+
+Let's unpack the **signature** piece by piece:
+
+- `function randomItem` — declaring a function named `randomItem`.
+- `<T>` — this is a **generic type parameter**. Read it as "this function works for any type `T`." When you call `randomItem(['a', 'b'])`, TypeScript figures out `T = string`. When you call `randomItem([1, 2, 3])`, `T = number`. Generics let one function be type-safe for many types without rewriting it.
+- `(arr: T[])` — one parameter named `arr`, typed as "an array of `T`." The `T[]` syntax means "array of T."
+- `: T` — the function **returns** a single value of type `T` — one element from the array.
+
+Now the body:
+
+- `arr.length` — every array has a `.length` property; `['a', 'b', 'c'].length` is `3`.
+- `Math.random()` — built-in function that returns a random decimal between `0` (inclusive) and `1` (exclusive), e.g., `0.5382...`.
+- `Math.random() * arr.length` — multiplies that random decimal by the length. For a 3-item array, you get something between `0` and `2.999...`.
+- `Math.floor(...)` — rounds **down** to the nearest integer. So `Math.floor(2.7)` is `2`; `Math.floor(0.1)` is `0`.
+- `arr[...]` — array index access. With a random floor between `0` and `arr.length - 1`, we get a random item.
+
+```typescript
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+```
+
+Same idea, but scaled so you get a random integer between `min` and `max` (both inclusive). The `+1` inside makes `max` reachable; the `+ min` at the end shifts the range up.
+
+```typescript
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+```
+
+This one is tricky because it combines four new concepts. Let's decode it:
+
+- The string `'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'` is a **template** for a UUID (a universally unique identifier — a standard 36-character ID format). Every `x` and `y` will be replaced with a random hex digit.
+- `.replace(/[xy]/g, ...)` — a string method. It finds every character matching the **regular expression** `/[xy]/g` (meaning "any `x` or `y`, globally — all of them") and replaces each with whatever the second argument returns.
+- `(c) => { ... }` — an **arrow function** that's called once per matched character. `c` is the character being replaced (`'x'` or `'y'`).
+- `Math.random() * 16 | 0` — generate a random number 0–15.999..., then **bitwise OR with 0** (`| 0`) to quickly truncate to an integer. (It's a faster-but-sneakier version of `Math.floor`.)
+- `c === 'x' ? r : (r & 0x3 | 0x8)` — the **ternary operator**: `condition ? valueIfTrue : valueIfFalse`. If the character is `'x'`, use the random number as-is. If it's `'y'`, mangle it with bit operations (this is what the UUID spec requires for that position).
+- `v.toString(16)` — convert the number to base 16 (hex), giving you one character like `'a'`, `'5'`, or `'f'`.
+
+You don't need to internalize the bitwise magic. The takeaway: this helper produces a random string like `"a1b2c3d4-e5f6-4789-abcd-0123456789ab"`.
+
+```typescript
+function weightedEventType(): string {
+  const rand = Math.random();
+  if (rand < 0.55) return 'page_view';
+  if (rand < 0.75) return 'click';
+  if (rand < 0.90) return 'signup';
+  return 'purchase';
+}
+```
+
+- Roll a random number `rand` between 0 and 1.
+- Cascading `if` statements pick the event type based on where `rand` falls.
+- The numbers are **cumulative probabilities**: 55% ≤ page_view, next 20% (0.55→0.75) = click, next 15% (0.75→0.90) = signup, last 10% (0.90→1.0) = purchase.
+
+Notice each branch has `return`, which exits the function immediately. If `rand < 0.55`, we return right there and never check the other `if`s.
+
+#### Chunk 4: The Main Seed Function
+
+```typescript
+async function seed(): Promise<void> {
+```
+
+- `async function` — this function uses `await` inside, so it must be declared `async`.
+- `seed()` — no parameters.
+- `: Promise<void>` — returns a promise that resolves to **nothing** (`void` means "no meaningful value"). The function does its work and finishes.
+
+```typescript
+await pool.query('DELETE FROM analytics_events');
+```
+
+- `pool.query(...)` sends a SQL statement to PostgreSQL and returns a promise.
+- `await` pauses here until the query finishes. Without `await`, the next line would run before the delete even started.
+- `DELETE FROM analytics_events` — SQL for "delete every row in the table." A clean slate before seeding.
+
+```typescript
+const now = new Date();
+let totalEvents = 0;
+```
+
+- `new Date()` — creates a `Date` object set to the current date and time. This is a built-in JavaScript class.
+- `let totalEvents = 0` — we use `let` (not `const`) because we'll reassign with `totalEvents += eventsToday` later.
+
+```typescript
+for (let day = DAYS - 1; day >= 0; day--) {
+```
+
+A **for loop** in three parts, separated by semicolons:
+
+1. `let day = DAYS - 1` — initialization; we start `day` at `89`.
+2. `day >= 0` — condition; keep looping as long as `day` is at least 0.
+3. `day--` — step; decrease `day` by 1 after each iteration (shorthand for `day = day - 1`).
+
+Loop counts down: 89, 88, 87, ..., 1, 0. So `day` represents "how many days ago." `day = 0` means today.
+
+```typescript
+const date = new Date(now);
+date.setDate(date.getDate() - day);
+```
+
+- `new Date(now)` — make a **copy** of `now`. If we modified `now` directly, every iteration would drift.
+- `date.setDate(date.getDate() - day)` — grab the day-of-month from `date`, subtract `day`, set it back. JavaScript's `Date` automatically handles month/year rollover (subtracting 5 from "March 3" gives you "February 26").
+
+```typescript
+const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+const multiplier = isWeekend ? 0.6 : 1;
+const eventsToday = Math.round(
+  randomInt(EVENTS_PER_DAY_MIN, EVENTS_PER_DAY_MAX) * multiplier
+);
+```
+
+- `date.getDay()` returns `0` for Sunday, `6` for Saturday. `===` is strict equality.
+- `||` is logical OR. `isWeekend` is `true` if either check passes.
+- `isWeekend ? 0.6 : 1` — the ternary again: 0.6x traffic if weekend, else 1x.
+- `Math.round(...)` — round to the nearest integer.
+
+```typescript
+const values: string[] = [];
+const params: (string | number)[] = [];
+let paramIndex = 1;
+```
+
+Three **accumulators** we'll fill inside the inner loop:
+
+- `values: string[]` — an array of strings; each string will be a chunk of SQL like `($1, $2, $3, ...)`.
+- `params: (string | number)[]` — an array of either strings or numbers. The `|` is a **union type**: "this array contains values that are either strings or numbers, in any mix."
+- `paramIndex` — `let` because we'll increment it with each event.
+
+```typescript
+for (let i = 0; i < eventsToday; i++) {
+```
+
+Standard inner loop: `i` counts up from `0` to `eventsToday - 1`. One iteration per event we're generating.
+
+```typescript
+const eventType = weightedEventType();
+const value = eventType === 'purchase' ? purchaseValue() : 0;
+```
+
+- Pick a weighted event type.
+- If it's a purchase, generate a dollar amount; otherwise value is 0. (You can't earn revenue from a page view.)
+
+```typescript
+const hour = randomInt(6, 23);
+const minute = randomInt(0, 59);
+const eventDate = new Date(date);
+eventDate.setHours(hour, minute, randomInt(0, 59));
+```
+
+- Pick a random hour (6am–11pm, weighted toward business hours by excluding 0–5).
+- Copy `date` again (don't mutate the day loop's date).
+- `setHours(hour, minute, seconds)` sets hours, minutes, and seconds in one call.
+
+```typescript
+values.push(
+  `($${paramIndex}, $${paramIndex + 1}, ..., $${paramIndex + 8})`
+);
+```
+
+- `values.push(x)` adds `x` to the end of the `values` array.
+- The backticks make a template literal. `$${paramIndex}` expands to e.g. `$1`, `$2`, ... — these are PostgreSQL's **placeholder syntax** (like `?` in other databases).
+- Each event needs 9 placeholders (one per column), so we emit `($1, $2, $3, $4, $5, $6, $7, $8, $9)` for the first event, `($10, ..., $18)` for the second, and so on.
+
+```typescript
+params.push(
+  eventType,
+  randomItem(CATEGORIES),
+  // ...
+);
+```
+
+- `params.push(a, b, c)` — you can push multiple values at once. Each one lands in the next slot.
+- The order here **must** match the order of placeholders above. Position is the only thing linking them.
+
+```typescript
+paramIndex += 9;
+```
+
+Shorthand for `paramIndex = paramIndex + 9`. After each event, jump the placeholder counter by 9 so the next event starts at the right number.
+
+```typescript
+if (values.length > 0) {
+  await pool.query(
+    `INSERT INTO analytics_events
+      (event_type, category, value, country, device, browser, page, session_id, created_at)
+     VALUES ${values.join(', ')}`,
+    params
+  );
+}
+```
+
+- Only run the insert if we actually built something (avoids inserting nothing on empty days).
+- `values.join(', ')` — takes the array `['($1, ..., $9)', '($10, ..., $18)', ...]` and turns it into one big string separated by commas. This is how JavaScript turns an array into a single string.
+- The final SQL looks like `INSERT INTO ... VALUES ($1, ...), ($10, ...), ($19, ...)` — **one insert, many rows**.
+- `pool.query(sql, params)` — the second argument is the values array. The driver sends `sql` and `params` separately, substituting safely on the server side. This is the safe pattern that prevents SQL injection.
+
+```typescript
+totalEvents += eventsToday;
+```
+
+Shorthand for `totalEvents = totalEvents + eventsToday`. Running tally.
+
+#### Chunk 5: Cleanup
+
+```typescript
+const summary = await pool.query(`
+  SELECT event_type, COUNT(*) as count, ...
+  FROM analytics_events
+  GROUP BY event_type
+  ORDER BY count DESC
+`);
+
+console.log('\nEvent summary:');
+console.table(summary.rows);
+```
+
+- One last query to aggregate what we just inserted, for confirmation.
+- `summary.rows` is the array of result rows — the query driver wraps the result in an object with `.rows`, `.rowCount`, and some metadata.
+- `console.table(rows)` — pretty-prints rows as a table in the terminal. Much nicer than `console.log` for tabular data.
+- `\n` is a **newline character** in a string, giving a blank line before the table.
+
+```typescript
+await pool.end();
+```
+
+Gracefully close the pool — otherwise the script hangs because connections stay open. Important for scripts; for a long-running server you'd never call this.
+
+```typescript
+seed().catch((err) => {
+  console.error('Seed failed:', err);
+  process.exit(1);
+});
+```
+
+- `seed()` returns a promise (because it's `async`).
+- `.catch((err) => {...})` — if the promise rejects (something threw), run this handler.
+- `process.exit(1)` — exit the Node process with code `1`. Exit code `0` means success; anything else means failure. This tells CI/CD tools "the seed failed, don't continue."
 
 > **Key Concept: Parameterized Queries (Defense Against SQL Injection)**
 > **Technical:** Passing values as a second argument to `pool.query(sql, params)` tells the PostgreSQL driver to send them as separate binary data, not concatenated into the SQL string. Even if a value contains malicious SQL like `'; DROP TABLE users; --`, it will be treated as a literal string, never executed.
@@ -537,14 +989,48 @@ export const httpLogger = pinoHttp({
 });
 ```
 
-**Line-by-line breakdown:**
+### Reading This File Line-by-Line
 
-| Line | What it does | Why it matters |
-|------|-------------|----------------|
-| `import pino from 'pino'` | The fastest Node.js logger | pino is ~5x faster than alternatives like Winston because it serializes JSON in worker threads. |
-| `level: 'info' / 'debug'` | Controls log verbosity | `debug` logs everything; `info` skips fine-grained debug noise. Production should be quieter. |
-| `transport: { target: 'pino-pretty' }` | Reformats logs as colored text | Only loaded in development. In production, `transport: undefined` means raw JSON output. |
-| `autoLogging.ignore` | Skip logging certain requests | Health checks fire every ~30s; logging them buries real signal in noise. |
+```typescript
+import pino from 'pino';
+import pinoHttp from 'pino-http';
+```
+
+Two default imports from two different packages. `pino` is the core logger; `pino-http` is the Express middleware wrapper for it.
+
+```typescript
+export const logger = pino({
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  transport:
+    process.env.NODE_ENV !== 'production'
+      ? { target: 'pino-pretty', options: { colorize: true } }
+      : undefined,
+});
+```
+
+- `export const logger = ...` — we declare a constant **and** export it in one line, so other files can `import { logger } from './logger'`.
+- `pino({...})` — call the `pino` factory with a config object. It returns a logger instance.
+- `process.env.NODE_ENV` is an environment variable set by your hosting platform. By convention, it's `'production'` in production and `'development'` locally.
+- `process.env.NODE_ENV === 'production' ? 'info' : 'debug'` — ternary: "if production, set the log level to `'info'`; otherwise `'debug'`."
+  - `'debug'` prints everything, including fine-grained trace logs.
+  - `'info'` prints normal events but skips debug noise.
+- `transport: ... ? {...} : undefined` — another ternary, but on a whole config object.
+  - In development, use `pino-pretty` to format logs as colored, human-friendly text.
+  - In production, `undefined` means "no transport" — pino emits raw JSON, which log aggregators love.
+
+```typescript
+export const httpLogger = pinoHttp({
+  logger,
+  autoLogging: {
+    ignore: (req) => req.url === '/api/health',
+  },
+});
+```
+
+- `pinoHttp({...})` — wraps the logger into Express middleware.
+- `logger` — shorthand for `logger: logger`. When an object key and value share a name, you can write the name once. This is called **shorthand property names**.
+- `autoLogging.ignore` is a function; pino-http calls it with the incoming request. If it returns `true`, skip logging. Here we skip health checks.
+- `(req) => req.url === '/api/health'` — an arrow function that takes the request and returns `true` if the URL is `/api/health`.
 
 > ⚠️ **Common Mistake: `console.log` in Production**
 > `console.log` writes synchronously, blocking the event loop. Under load, this becomes a measurable performance hit. pino batches writes asynchronously and is designed for production use. Once you use pino, never reach for `console.log` again — call `logger.info(...)` so logs are consistent and structured.
@@ -598,15 +1084,38 @@ export const strictLimiter = rateLimit({
 });
 ```
 
-**Option breakdown:**
+### Reading This File Line-by-Line
 
-| Option | Value | Purpose |
-|--------|-------|---------|
-| `windowMs` | 15 min (general), 1 min (strict) | The size of the counting window. |
-| `max` | 100 / 20 | Maximum requests allowed in the window. |
-| `standardHeaders: true` | Sends `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` headers | Lets clients know how many requests they have left, without trial-and-error. |
-| `legacyHeaders: false` | Disables old `X-RateLimit-*` headers | Use the modern standard. |
-| `message` | JSON object | Sent as the response body (with status `429`) when the limit is exceeded. |
+```typescript
+import rateLimit from 'express-rate-limit';
+```
+
+Default import from the `express-rate-limit` npm package. `rateLimit` is a **factory function** — you call it with a config and it hands back an Express middleware.
+
+```typescript
+export const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many requests. Please try again later.',
+  },
+});
+```
+
+- `export const generalLimiter` — export this middleware so `index.ts` can `import { generalLimiter } from '...'`.
+- `rateLimit({...})` — call the factory, passing one config object. What it returns is a function that looks like `(req, res, next) => ...` — exactly the middleware shape Express expects.
+
+Each config option:
+
+- `windowMs: 15 * 60 * 1000` — JavaScript does the math at read time. `15 * 60 * 1000` = `900,000` milliseconds = 15 minutes. Writing it as a multiplication is a **readability trick**: anyone reading "15 × 60 seconds × 1000 ms" instantly sees "fifteen minutes." Writing `900000` would be opaque.
+- `max: 100` — allow at most 100 requests per IP per window.
+- `standardHeaders: true` — send modern `RateLimit-*` response headers so clients can see how many requests they have left.
+- `legacyHeaders: false` — skip the old `X-RateLimit-*` headers (many APIs still emit both; we don't need to).
+- `message: { error: '...' }` — object sent as the JSON body when someone hits the limit. Along with the `429 Too Many Requests` status code, the client sees `{ "error": "Too many requests..." }`.
+
+The `strictLimiter` below works the same way with tighter numbers — shorter window (1 minute), fewer requests (20). You'll later attach this one to only the expensive `/events` endpoint.
 
 > **Spatial Note: Where Does the Counter Live?**
 > By default, `express-rate-limit` stores counters in memory inside the Node.js process. That works for a single server. The moment you scale to multiple servers, each one has its own counter — a user could send 100 requests to each server and bypass the limit. In production at scale, you would use a Redis-backed store. For Level 4, in-memory is fine.
@@ -710,14 +1219,108 @@ export function validateAnalyticsQuery(
 }
 ```
 
-**Key patterns:**
+### Reading This File Line-by-Line
 
-| Pattern | What it does | Why |
-|---------|-------------|-----|
-| `(req, res, next): void` | Standard middleware signature | Three arguments = regular middleware. Four arguments = error handler. Express uses argument count to distinguish. |
-| `if (startDate && !dateRegex.test(...))` | Only validate if the field is present | Most filters are optional. We skip validation for absent fields. |
-| `res.status(400).json({ error: ... }); return;` | Respond and stop | The `return` is critical — without it, execution continues, eventually calling `next()`, which would invoke the route handler. |
-| `next()` at the bottom | Pass control to the next middleware | If we get here, all checks passed. The route handler runs next. |
+```typescript
+import { Request, Response, NextFunction } from 'express';
+```
+
+Named imports of **TypeScript types** — not values, but shapes. `Request`, `Response`, and `NextFunction` describe what Express passes into middleware. We use them below to annotate the function's parameters so TypeScript can check our code.
+
+```typescript
+export function validateAnalyticsQuery(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+```
+
+- `export function` — declare and export a named function in one line.
+- Parameters are typed: `req: Request`, `res: Response`, `next: NextFunction`. This is standard Express middleware.
+- `: void` — "this function returns nothing." It acts through side effects (sending a response or calling `next()`).
+
+```typescript
+const { startDate, endDate, category, device, page: pageNum, limit } = req.query;
+```
+
+This is **destructuring**. Read it as "pull these fields out of `req.query` and give me named variables":
+
+- `startDate` → `req.query.startDate`
+- `endDate` → `req.query.endDate`
+- `category` → `req.query.category`
+- `device` → `req.query.device`
+- `page: pageNum` → pull `req.query.page` but **rename it** to `pageNum` locally. We rename to avoid shadowing any global or built-in `page` variable.
+- `limit` → `req.query.limit`
+
+`req.query` is an object Express builds for you by parsing the URL's query string. If the URL is `/overview?startDate=2025-01-01&category=marketing`, then `req.query` is `{ startDate: '2025-01-01', category: 'marketing' }`.
+
+```typescript
+const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+```
+
+A **regular expression** — a pattern for matching text. Breaking it down:
+
+- `/ ... /` — the slashes delimit a regex literal.
+- `^` — "match starts at the beginning."
+- `\d{4}` — "exactly 4 digits."
+- `-` — a literal hyphen.
+- `\d{2}` — "exactly 2 digits."
+- `$` — "match ends here."
+
+So this pattern says "the whole string must be four digits, a hyphen, two digits, a hyphen, two digits" — the shape of `YYYY-MM-DD`.
+
+```typescript
+if (startDate && !dateRegex.test(startDate as string)) {
+  res.status(400).json({ error: 'Invalid startDate format. Use YYYY-MM-DD.' });
+  return;
+}
+```
+
+- `if (startDate && ...)` — `&&` is logical AND. Since `startDate` might be `undefined` (the user didn't provide it), we check that first. If `startDate` is falsy, JavaScript short-circuits — the right side never runs.
+- `dateRegex.test(value)` — returns `true` if `value` matches the regex, `false` otherwise. The `!` in front negates it — "if it does NOT match."
+- `startDate as string` — a **type assertion**. `req.query` values can be strings, arrays, or even other objects (depending on the URL). We're telling TypeScript, "trust me, treat it as a plain string." Use this carefully — you're overriding the type checker.
+- `res.status(400).json({ ... })` — **method chaining**. `res.status(400)` sets the HTTP status code and returns `res` itself, letting you immediately call `.json(...)` on the same object. `.json(obj)` serializes `obj` to JSON and sends it as the response body.
+- `return;` — **critical**. Without this, execution continues past the `if` and might eventually call `next()`, sending the same request to the real route handler with bad data. The `return` stops the function dead.
+
+```typescript
+if (startDate && endDate) {
+  if (new Date(startDate as string) > new Date(endDate as string)) {
+    res.status(400).json({ error: 'startDate must be before endDate.' });
+    return;
+  }
+}
+```
+
+- Only runs if both dates are provided.
+- `new Date(string)` parses a date string into a `Date` object. `Date` objects can be compared with `>` — JavaScript converts them to timestamps (milliseconds since 1970) under the hood.
+
+```typescript
+const validCategories = ['marketing', 'product', 'support', 'engineering'];
+if (category && !validCategories.includes(category as string)) {
+  res.status(400).json({ ... });
+  return;
+}
+```
+
+- `validCategories.includes(x)` — built-in array method; returns `true` if `x` is somewhere in the array.
+- Same shape as the date check: if value is present AND not in our allowlist, reject.
+
+```typescript
+if (pageNum && (isNaN(Number(pageNum)) || Number(pageNum) < 1)) {
+  res.status(400).json({ error: 'page must be a positive integer.' });
+  return;
+}
+```
+
+- `Number(x)` — convert `x` to a number. `Number('5')` is `5`; `Number('abc')` is `NaN` (a special "not a number" value).
+- `isNaN(x)` — returns `true` if `x` is `NaN`. You can't do `x === NaN` because `NaN` is famously not equal to itself.
+- The condition reads: "page is provided AND (it's not a number OR it's less than 1)." Catches both `?page=abc` and `?page=-1`.
+
+```typescript
+next();
+```
+
+If we made it here, everything passed. Call `next()` with no arguments to hand the request to the next middleware (in our case, the route handler). Passing no argument (or `undefined`) means "no error."
 
 > ⚠️ **Common Mistake: Forgetting `return` After `res.status(400)`**
 > `res.status().json()` does NOT stop the function. If you forget `return`, execution falls through and may hit `next()`, which sends the request to the route handler with invalid input. Or worse, two responses are sent and Express crashes with `Cannot set headers after they are sent`.
@@ -768,15 +1371,58 @@ export function errorHandler(
 }
 ```
 
-**Key details:**
+### Reading This File Line-by-Line
 
-| Detail | Why |
-|--------|-----|
-| `(err, _req, res, _next)` — four parameters | Express identifies error handlers by argument count. Three arguments = normal middleware. Four = error handler. |
-| `_req`, `_next` (underscore prefix) | TypeScript/lint convention meaning "I have to declare this parameter but I'm not using it." Required because Express uses position, not name. |
-| `logger.error({ err }, 'Unhandled error')` | Logs the structured error object server-side | `err` is captured with stack trace; the `'Unhandled error'` becomes `msg`. |
-| `res.statusCode !== 200 ? res.statusCode : 500` | Use whatever status was already set, or default to 500 | If a route did `res.status(403)` then threw, we keep 403. Otherwise it is an unexpected error → 500. |
-| `process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message` | Hide details in production, expose them in dev | Dev developers need real messages to debug; prod users get nothing exploitable. |
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import { logger } from './logger';
+```
+
+Named imports. The second line is a **relative import** — it reaches into the sibling `logger.ts` file and pulls out the `logger` constant we exported earlier.
+
+```typescript
+export function errorHandler(
+  err: Error,
+  _req: Request,
+  res: Response,
+  _next: NextFunction
+): void {
+```
+
+The **four-parameter signature** is how Express knows this is an error handler, not a normal middleware. Regular middleware has three parameters (`req`, `res`, `next`); error handlers have four, with `err` first.
+
+- `err: Error` — the error object. `Error` is a built-in JavaScript class with a `.message` and a `.stack`.
+- `_req: Request` and `_next: NextFunction` — we must declare them because Express inspects the function's arity (parameter count), but we don't use them. The **underscore prefix** is a common convention meaning "I'm aware I'm not using this." It silences unused-variable warnings in many linters.
+
+```typescript
+logger.error({ err }, 'Unhandled error');
+```
+
+- `logger.error(...)` — log at the `error` level. pino methods typically accept `(objectWithData, messageString)`.
+- `{ err }` — another **shorthand property name**. Equivalent to `{ err: err }` — an object with a single field `err` holding the error object. pino will serialize the error's stack trace, message, and name into the structured log.
+
+```typescript
+const statusCode = res.statusCode !== 200 ? res.statusCode : 500;
+```
+
+- `res.statusCode` — the HTTP status currently set on the response (defaults to `200` if nothing was set).
+- Ternary: "if the status was already changed from 200, keep it; otherwise use 500."
+- Why? Sometimes a route sets `res.status(403)` then throws — we want to preserve the 403. But if the status is still 200 (meaning we never set one), the only sensible default is 500 ("Internal Server Error").
+
+```typescript
+res.status(statusCode).json({
+  error: process.env.NODE_ENV === 'production'
+    ? 'Internal server error'
+    : err.message,
+});
+```
+
+- Method chaining again: set status, then send JSON.
+- The body's `error` field is decided by a ternary based on environment:
+  - **Production:** a generic `'Internal server error'`. Reveals nothing about your stack.
+  - **Development:** `err.message` — the real message, so you can debug.
+
+The **full error with stack trace** still goes to the logs in both environments. The user-facing response is simply sanitized in production.
 
 ---
 
@@ -909,16 +1555,82 @@ function buildWhereClause(filters: AnalyticsFilters): {
 }
 ```
 
-**How it works:**
+### Reading `buildWhereClause` Line-by-Line
 
-| Step | What happens |
-|------|--------------|
-| `conditions: string[]` | Accumulator for SQL fragments like `"category = $3"` |
-| `params: (string \| number)[]` | Parallel accumulator for the actual values |
-| `paramIndex` | The current placeholder number, incremented as we add values |
-| Each `if` block | Only runs if that filter was provided |
-| `created_at < ($${paramIndex}::date + interval '1 day')` | Includes the entire end date — `< endDate + 1 day` covers all of `endDate` |
-| Return shape | `clause` is the final string (or empty if no filters), `params` is the values, `nextParam` lets callers add more placeholders after |
+```typescript
+import pool from '../db/index';
+import type {
+  OverviewStats,
+  // ...
+  AnalyticsFilters,
+} from '../types/index';
+```
+
+- First import pulls in the shared pool.
+- Second is `import type { ... }` — a TypeScript-only construct. It says "I'm importing these **only for type-checking**; don't include them in the compiled JavaScript." Types vanish at runtime; only the compiler uses them. The `type` keyword makes that explicit and speeds up builds.
+
+```typescript
+function buildWhereClause(filters: AnalyticsFilters): {
+  clause: string;
+  params: (string | number)[];
+  nextParam: number;
+} {
+```
+
+- `filters: AnalyticsFilters` — the parameter is typed by a named type (defined elsewhere in `types/index.ts`).
+- The return type is an **inline object type**. Read it as "this function returns an object with three fields: `clause` (a string), `params` (an array of strings or numbers), and `nextParam` (a number)."
+
+```typescript
+const conditions: string[] = [];
+const params: (string | number)[] = [];
+let paramIndex = 1;
+```
+
+Three accumulators:
+
+- `conditions` — an array of SQL fragments like `'created_at >= $1'`. We'll join them with `' AND '` at the end.
+- `params` — a **parallel** array of the actual values. Fragment `N` in `conditions` refers to slot `N` in `params`.
+- `paramIndex` — tracks the next placeholder number. Starts at 1 because PostgreSQL placeholders are 1-indexed (`$1`, `$2`, ...).
+
+```typescript
+if (filters.startDate) {
+  conditions.push(`created_at >= $${paramIndex}`);
+  params.push(filters.startDate);
+  paramIndex++;
+}
+```
+
+- `if (filters.startDate)` — only run if the field was provided. If it's `undefined`, this block skips entirely.
+- `conditions.push(...)` — adds a new fragment like `'created_at >= $1'` to the end of the array.
+- Backticks again: `$${paramIndex}` expands to `$1` on the first call, `$2` on the next, etc.
+- `params.push(filters.startDate)` — push the actual value into the same slot.
+- `paramIndex++` — increment for next time. `++` is shorthand for `= paramIndex + 1`.
+
+The key invariant: **`conditions[i]` always refers to `params[i]`**. Keeping them synchronized as you build up is how parameterized queries work.
+
+```typescript
+if (filters.endDate) {
+  conditions.push(`created_at < ($${paramIndex}::date + interval '1 day')`);
+  params.push(filters.endDate);
+  paramIndex++;
+}
+```
+
+Same shape, but the SQL fragment is tricky: `$1::date + interval '1 day'`. Breaking that down:
+
+- `$1::date` — PostgreSQL's **cast** syntax. Says "treat this value as a `date` type."
+- `+ interval '1 day'` — PostgreSQL can add an interval to a date to get a new date.
+- `created_at < (endDate + 1 day)` means "include the entire `endDate`, not just midnight of that day." If a user passes `endDate=2025-01-31`, we want events at 3pm on the 31st to still match — so we compare against the *start* of Feb 1 using `<`.
+
+```typescript
+const clause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+return { clause, params, nextParam: paramIndex };
+```
+
+- If we accumulated any conditions, prefix them with `WHERE` and join with `' AND '`. Example output: `WHERE created_at >= $1 AND category = $2`.
+- If no filters were given, `clause` is an empty string — safe to interpolate into the query without breaking syntax.
+- `return { clause, params, nextParam: paramIndex }` uses **shorthand property names** again: `{ clause }` is `{ clause: clause }`. `nextParam: paramIndex` renames it on the way out (callers see `.nextParam`, not `.paramIndex`).
 
 > **Why return `nextParam`?**
 > Some queries need to add more placeholders *after* the WHERE clause (for example, pagination's `LIMIT $5 OFFSET $6`). Returning the next available index lets callers continue numbering correctly.
@@ -1084,6 +1796,100 @@ export async function getTopPages(
 }
 ```
 
+### Reading `getOverview` Line-by-Line
+
+```typescript
+export async function getOverview(filters: AnalyticsFilters): Promise<OverviewStats> {
+```
+
+- `export async function` — exported, marked async because we use `await` inside.
+- `Promise<OverviewStats>` — returns a promise that will eventually resolve to an `OverviewStats` object (a shape defined in `types/index.ts`). TypeScript will enforce that the value we `return` matches that shape.
+
+```typescript
+const { clause, params } = buildWhereClause(filters);
+```
+
+**Destructuring the helper's return value.** `buildWhereClause` returns an object with three fields; we're pulling out only `clause` and `params` for this query. (`nextParam` exists on the return value but we don't need it here.)
+
+```typescript
+const result = await pool.query(
+  `SELECT
+     COUNT(*) FILTER (WHERE event_type = 'page_view')  AS total_page_views,
+     COUNT(*) FILTER (WHERE event_type = 'signup')      AS total_signups,
+     COALESCE(SUM(value), 0)                            AS total_revenue,
+     MIN(created_at)                                     AS period_start,
+     MAX(created_at)                                     AS period_end
+   FROM analytics_events
+   ${clause}`,
+  params
+);
+```
+
+- `` `... ${clause}` `` — backticks with template substitution. `${clause}` drops in either `'WHERE created_at >= $1 AND ...'` or an empty string. Either way, the SQL stays valid.
+- `pool.query(sql, params)` — two-argument form. The driver inserts the `params` values safely into the placeholders at send time. **Values never become part of the SQL grammar.**
+- `await` pauses until PostgreSQL responds. Without `await`, `result` would be a promise, not the answer.
+
+Now the SQL itself — this is the first time you're seeing several aggregation features:
+
+- `COUNT(*) FILTER (WHERE event_type = 'page_view')` — count only rows matching the inner condition. You can stack multiple of these in one query, each filtering differently.
+- `AS total_page_views` — **column alias**. Renames the output column so `result.rows[0].total_page_views` reads cleanly.
+- `COALESCE(SUM(value), 0)` — `SUM` returns `NULL` when there are no rows. `COALESCE(a, b)` returns `a` if it's not null, else `b`. So this reads as "sum of values, or 0 if no rows."
+- `MIN(created_at)`, `MAX(created_at)` — earliest and latest timestamps in the filtered set.
+
+```typescript
+const row = result.rows[0];
+```
+
+`pool.query` returns `{ rows: [...], rowCount: N, ... }`. Since this query returns exactly one row of aggregates, we grab `rows[0]`.
+
+```typescript
+const sessions = Number(sessionResult.rows[0].sessions) || 1;
+const totalSeconds = Number(sessionResult.rows[0].total_seconds) || 0;
+const avgDuration = Math.round(totalSeconds / sessions);
+```
+
+- `Number(x)` — convert string to number. The pg driver returns `BIGINT` and `DECIMAL` as strings to preserve precision. Casting with `Number(...)` gives you a real JavaScript number.
+- `|| 1` — **logical OR with a fallback**. If the left side is falsy (0, null, undefined, NaN), use the right side. Here it prevents division by zero: if `sessions` is 0, fall back to 1.
+- `Math.round(...)` — standard rounding to the nearest integer.
+
+```typescript
+return {
+  total_page_views: Number(row.total_page_views),
+  total_signups: Number(row.total_signups),
+  total_revenue: Number(row.total_revenue),
+  avg_session_duration: Math.min(avgDuration, 600),
+  period_start: row.period_start,
+  period_end: row.period_end,
+};
+```
+
+- Build and return a plain object matching the `OverviewStats` type.
+- `Math.min(a, b)` — returns the smaller of two values. We cap `avg_session_duration` at 600 seconds (10 minutes) to avoid absurd numbers when the data is sparse.
+- Timestamps are returned as-is — the pg driver gives us `Date` objects automatically, which `JSON.stringify` serializes to ISO strings when Express sends them.
+
+### Reading `getTimeSeries` — The `.map(...)` Pattern
+
+```typescript
+return result.rows.map((row) => ({
+  date: row.date.toISOString().split('T')[0],
+  page_views: Number(row.page_views),
+  signups: Number(row.signups),
+  revenue: Number(row.revenue),
+}));
+```
+
+- `result.rows.map((row) => ({...}))` — `.map` is an array method that **transforms each item**, returning a new array. For each row from the DB, we produce a cleaned-up object.
+- `(row) => ({...})` — arrow function. Note the **parentheses around the object**: `=> ({...})`. Without them, the curly braces would be interpreted as a function body, not an object literal. You must wrap an object literal in parens when returning it from a concise arrow function.
+- `row.date.toISOString().split('T')[0]` — chained methods:
+  - `.toISOString()` turns a `Date` into a string like `"2025-02-28T00:00:00.000Z"`.
+  - `.split('T')` breaks that string into `["2025-02-28", "00:00:00.000Z"]`.
+  - `[0]` grabs the first piece — just the date part.
+- `Number(row.page_views)` — remember, pg returns numeric strings; convert to real numbers.
+
+### Reading the Other Aggregates
+
+All follow the same shape: `buildWhereClause` → `await pool.query(...)` → `.map(row => ({...}))`. The only things that change are the SQL and the output field names. Once you've internalized the pattern in `getOverview`, the others are variations.
+
 **Key SQL patterns to internalize:**
 
 | Pattern | What it does | When to reach for it |
@@ -1166,14 +1972,65 @@ export async function getEvents(
 }
 ```
 
-**How it composes with `buildWhereClause`:**
+### Reading `getEvents` Line-by-Line
 
-| Detail | Why |
-|--------|-----|
-| `nextParam` from the helper | The first available placeholder number after the filters |
-| `LIMIT $${nextParam} OFFSET $${nextParam + 1}` | Reserves the next two placeholder slots for `limit` and `offset` |
-| `[...params, limit, offset]` | Spreads the existing filter params, then appends `limit` and `offset` in the same positions |
-| `(page - 1) * limit` | Standard offset math: page 1 → offset 0, page 2 → offset 20, etc. |
+```typescript
+export async function getEvents(
+  filters: AnalyticsFilters,
+  page: number = 1,
+  limit: number = 20
+): Promise<PaginatedEvents> {
+```
+
+- Three parameters. The `= 1` and `= 20` are **default values**. If the caller doesn't pass them, they use those defaults.
+- Returns a promise resolving to a `PaginatedEvents` object.
+
+```typescript
+const { clause, params, nextParam } = buildWhereClause(filters);
+const offset = (page - 1) * limit;
+```
+
+- Destructure all three fields from the helper this time — we need `nextParam` for pagination placeholders.
+- `(page - 1) * limit` — classic offset math. Page 1 skips 0 rows; page 2 skips `limit` rows; page 3 skips `2*limit`, and so on.
+
+```typescript
+const countResult = await pool.query(
+  `SELECT COUNT(*) FROM analytics_events ${clause}`,
+  params
+);
+const total = Number(countResult.rows[0].count);
+```
+
+Query 1: total matching rows, ignoring pagination. `COUNT(*)` always returns one row with a `count` column.
+
+```typescript
+const eventsResult = await pool.query(
+  `SELECT * FROM analytics_events
+   ${clause}
+   ORDER BY created_at DESC
+   LIMIT $${nextParam} OFFSET $${nextParam + 1}`,
+  [...params, limit, offset]
+);
+```
+
+Query 2: the actual page of rows.
+
+- `$${nextParam}` and `$${nextParam + 1}` — we're using the two placeholder slots **after** the ones the filters took. If filters used `$1, $2`, `nextParam` is 3, so this line becomes `LIMIT $3 OFFSET $4`.
+- `[...params, limit, offset]` — **spread operator** followed by two more values. This says "copy every value from `params` into a new array, then append `limit`, then `offset`." The resulting array's positions line up exactly with the placeholder numbers in the SQL.
+
+```typescript
+return {
+  events: eventsResult.rows,
+  total,
+  page,
+  limit,
+  total_pages: Math.ceil(total / limit),
+};
+```
+
+- `events: eventsResult.rows` — the raw rows.
+- `total, page, limit` — shorthand properties (`total: total` etc.).
+- `Math.ceil(total / limit)` — round **up**. If there are 47 events and the page size is 20, `47/20 = 2.35` → `Math.ceil(2.35) = 3` total pages.
 
 ---
 
@@ -1303,14 +2160,84 @@ router.get('/events', strictLimiter, async (req: Request, res: Response, next: N
 export default router;
 ```
 
-**Patterns to internalize:**
+### Reading This File Line-by-Line
 
-| Pattern | What it does | Why |
-|---------|-------------|-----|
-| `router.use(validateAnalyticsQuery)` at the top | Applies validation to *every* route in this file | Without this, you'd have to add `validateAnalyticsQuery` to every `router.get(...)` call. DRY at the module level. |
-| `router.get('/events', strictLimiter, async ...)` | Stacks an extra middleware on a single route | Per-route middleware lets you opt specific endpoints into stricter behavior without changing global config. |
-| `try { ... } catch (err) { next(err); }` | Forwards async errors to the error handler | Express does NOT automatically catch errors from `async` route handlers in Express 4. (Express 5 does, but assume Express 4.) |
-| `import * as analyticsService` | Imports all exports as one namespace | Makes calls like `analyticsService.getOverview(...)` self-documenting at the call site. |
+```typescript
+import { Router, Request, Response, NextFunction } from 'express';
+import { validateAnalyticsQuery } from '../middleware/validator';
+import { strictLimiter } from '../middleware/rateLimiter';
+import * as analyticsService from '../services/analyticsService';
+import type { AnalyticsFilters } from '../types/index';
+```
+
+- `Router` is Express's **mini-app** — a standalone request router you can mount at any path. We'll build a router here and attach it in `index.ts` at `/api/analytics`.
+- The fourth import is new syntax: `import * as analyticsService from '...'`. This is a **namespace import**. Instead of pulling specific names with curly braces, we grab everything the file exports and bundle it under one name. Then we call `analyticsService.getOverview(...)`, `analyticsService.getTimeSeries(...)`, etc. — reads well at call sites.
+
+```typescript
+const router = Router();
+```
+
+Call the `Router` factory (no `new` — it's a factory function, not a class). We now have a fresh router to configure.
+
+```typescript
+router.use(validateAnalyticsQuery);
+```
+
+`router.use(middleware)` registers middleware that runs for **every** route registered on this router. Without this line, you'd have to add `validateAnalyticsQuery` as an argument to every `router.get(...)` call below. Registering it once at the top is cleaner and harder to forget.
+
+```typescript
+function getFilters(req: Request): AnalyticsFilters {
+  return {
+    startDate: req.query.startDate as string | undefined,
+    endDate: req.query.endDate as string | undefined,
+    category: req.query.category as string | undefined,
+    device: req.query.device as string | undefined,
+  };
+}
+```
+
+A little helper so we don't repeat this block in every route.
+
+- `req.query.startDate as string | undefined` — type assertion. `req.query` values can technically be strings, arrays, or undefined. We tell TypeScript "treat this as either a string or undefined" — because we already validated the shape in middleware. Anything that didn't match the expected shape would have been rejected before reaching this handler.
+
+```typescript
+router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filters = getFilters(req);
+    const stats = await analyticsService.getOverview(filters);
+    res.json(stats);
+  } catch (err) {
+    next(err);
+  }
+});
+```
+
+The canonical route shape. Break it down:
+
+- `router.get(path, handler)` — register a GET handler for `path`. The full path becomes `/api/analytics/overview` after we mount the router at `/api/analytics` in `index.ts`.
+- The handler is an **async arrow function**. It needs to be async because we `await` the service call.
+- `try { ... } catch (err) { next(err); }` — **error forwarding**. If the service throws (DB down, bad SQL, etc.), we catch it and pass the error to `next`. Calling `next(err)` with a non-null argument **skips all normal middleware and jumps to the error handler**. This is how async errors reach your centralized error handler.
+- `res.json(stats)` — serializes `stats` to JSON and sends it with status 200.
+
+```typescript
+router.get('/events', strictLimiter, async (req, res, next) => {
+```
+
+Same shape, but notice the extra argument: `strictLimiter`. `router.get` accepts any number of middleware arguments between the path and the final handler. They run in order. So for this route only, Express runs: `validateAnalyticsQuery` (from `router.use` up top) → `strictLimiter` → the handler.
+
+```typescript
+const page = Number(req.query.page) || 1;
+const limit = Number(req.query.limit) || 20;
+```
+
+- `Number(req.query.page)` — convert the string query param to a number. If it's undefined, the result is `NaN`.
+- `|| 1` — fallback: `NaN` is falsy, so `|| 1` supplies a default. If the user passes `?page=3`, we get `3`; if they don't pass `page` at all, we get `1`.
+
+```typescript
+export default router;
+```
+
+Export the configured router as the file's default export. `index.ts` will import it and mount it under `/api/analytics`.
 
 > ⚠️ **Common Mistake: Forgetting `next(err)` in Async Handlers**
 > If an async route handler throws and you don't `catch` it, the promise rejects silently. Express never sees the error, the client's request hangs until it times out, and your error handler never fires. The `try / catch / next(err)` pattern is mandatory in Express 4 async routes.
@@ -1388,17 +2315,96 @@ app.listen(PORT, () => {
 export default app;
 ```
 
-**Reading the order top-to-bottom:**
+### Reading This File Line-by-Line
 
-| Step | What it does | If you got this wrong |
-|------|-------------|----------------------|
-| 1. `httpLogger` | Logs every incoming request | Skip this and you have no visibility into traffic |
-| 2. `generalLimiter` | Counts requests per IP | Skip and a single bot can crash the database |
-| 3. `cors(...)` | Sets `Access-Control-Allow-Origin` headers | Skip and the browser blocks your frontend's requests |
-| 4. `express.json()` | Parses JSON request bodies | Skip and `req.body` is `undefined` for POST requests |
-| Routes | Handle the actual requests | These run *only* if all middleware above pass |
-| `/api/health` | Reports server + DB status | Render and most platforms ping this; never put it behind auth |
-| `errorHandler` | Catches anything that throws | Must be last, or it never sees errors from routes |
+```typescript
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { httpLogger, logger } from './middleware/logger';
+import { generalLimiter } from './middleware/rateLimiter';
+import { errorHandler } from './middleware/errorHandler';
+import analyticsRoutes from './routes/analytics';
+import pool from './db/index';
+```
+
+A parade of imports. Three defaults (`express`, `cors`, `dotenv`), three named imports from our own middleware, then a default import of the router we just built. Every one is something we're about to assemble into a complete server.
+
+```typescript
+dotenv.config({ path: '../.env' });
+```
+
+Load environment variables **before** anything else tries to read them. If you read `process.env.PORT` before calling `dotenv.config()`, you'll get `undefined` — timing matters.
+
+```typescript
+const app = express();
+const PORT = process.env.PORT || 3001;
+```
+
+- `express()` — call the factory to create a new Express app. This is your main HTTP server object.
+- `process.env.PORT || 3001` — read the `PORT` env var, fall back to `3001` locally. Hosting platforms like Render or Heroku set `PORT` automatically; locally, `3001` is a safe default.
+
+```typescript
+app.use(httpLogger);
+app.use(generalLimiter);
+app.use(cors({ origin: process.env.CORS_ORIGIN }));
+app.use(express.json());
+```
+
+`app.use(middleware)` registers middleware globally — it runs for **every** request, in the order you register it. Here's what each line does:
+
+1. **`httpLogger`** — our pino-based logger. Every incoming request gets logged (except `/api/health`).
+2. **`generalLimiter`** — counts requests per IP. If a client exceeds 100/15 min, this layer sends a 429 and stops the request from reaching the route.
+3. **`cors(...)`** — CORS (Cross-Origin Resource Sharing) is a browser-enforced security rule. If your frontend at `http://localhost:5173` tries to fetch from `http://localhost:3001`, the browser blocks it unless the server sends `Access-Control-Allow-Origin: http://localhost:5173` back. `cors({ origin: ... })` adds those headers. `process.env.CORS_ORIGIN` holds the allowed origin for your deployment.
+4. **`express.json()`** — parses JSON request bodies. After this middleware, `req.body` contains the decoded object for `POST`/`PUT` requests with `Content-Type: application/json`. Without it, `req.body` is `undefined`.
+
+```typescript
+app.use('/api/analytics', analyticsRoutes);
+```
+
+Mount the router at `/api/analytics`. A route registered as `/overview` inside the router becomes `/api/analytics/overview` at the app level. This is how Express "nests" routers into prefixes.
+
+```typescript
+app.get('/api/health', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      timestamp: result.rows[0].now,
+    });
+  } catch {
+    res.status(503).json({ status: 'error', database: 'disconnected' });
+  }
+});
+```
+
+- `app.get(...)` registers a route directly on the app (no separate router).
+- `_req` — underscore prefix because we don't use the request object. Just a signal for readers/linters.
+- `pool.query('SELECT NOW()')` — the simplest possible SQL. `NOW()` is a Postgres function returning the current time. If the DB is reachable, this succeeds.
+- `catch { ... }` — TypeScript 4+ lets you omit the error variable when you don't need it.
+- `503 Service Unavailable` — the right status when a dependency (the DB) is down, not the server itself.
+
+```typescript
+app.use(errorHandler);
+```
+
+Error handler registered **last**. Because of Express's special arity detection (four parameters = error handler), this middleware only fires when someone calls `next(err)` with a non-null error.
+
+```typescript
+app.listen(PORT, () => {
+  logger.info(`Server running on http://localhost:${PORT}`);
+});
+```
+
+- `app.listen(port, callback)` — start the HTTP server on `port`. The callback fires once it's actually listening.
+- `logger.info(...)` — structured info-level log. Uses our pino logger (not `console.log`).
+
+```typescript
+export default app;
+```
+
+Export `app` as default. Exporting is optional in the entry file — we don't import it anywhere — but it's useful if you later write integration tests that spin up the app without `.listen()`.
 
 > **Spatial Note: The Health Check Has Special Status**
 > Notice the health check tries a real database query. It is not enough to say "Express is running" — you want to know "Express *and* the database are reachable." If the DB is down, return `503 Service Unavailable` so load balancers can stop routing to this instance.

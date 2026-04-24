@@ -166,12 +166,26 @@ export default defineConfig({
 });
 ```
 
+### Reading This Config Line-by-Line
+
+- `import { defineConfig } from 'vite';` — named import of Vite's `defineConfig` helper. It's a no-op at runtime; its job is to give you TypeScript autocomplete on the config object so you don't have to remember every option.
+- `import react from '@vitejs/plugin-react';` — default import of Vite's React plugin. Packages that start with `@something/name` are called **scoped packages** (`@vitejs` is the scope, `plugin-react` is the name).
+- `export default defineConfig({ ... });` — default export of the whole config. Vite reads this file when you run `npm run dev` and honors the settings.
+- `plugins: [react()]` — the `plugins` option takes an array of plugin instances. We call `react()` to activate it. Without this, Vite wouldn't know how to handle JSX.
+- `server: { proxy: { ... } }` — configuration for the dev server. `proxy` is an object mapping URL prefixes to forwarding rules.
+- `'/api': { target: 'http://localhost:3001', changeOrigin: true }` — "when the browser asks the dev server for any URL starting with `/api`, quietly forward that request to `http://localhost:3001` (the backend) and send the response back."
+  - `changeOrigin: true` — rewrites the request's `Host` header so the backend sees itself as the target. Avoids subtle bugs when the backend cares about the `Host` header.
+
+With the proxy active, your frontend code can say `fetch('/api/entries')` and Vite transparently routes it to the backend. The browser thinks everything is same-origin, so CORS never enters the picture — in development.
+
 If you use the proxy, update `client/src/services/api.ts`:
 
 ```typescript
 // With proxy, no need for full URL
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 ```
+
+**Reading this small change:** the fallback is now just `'/api'` (a relative URL) instead of `'http://localhost:3001/api'` (an absolute URL). A relative URL is resolved against the current page's origin — `http://localhost:5173` during development. Vite's proxy catches it and forwards. In production, the same relative path hits your real backend because by then you'll have deployed frontend and backend together or set `VITE_API_URL` to the production backend URL.
 
 **Tradeoff:** The proxy only works in development (Vite dev server). In production, you'll still need CORS configured because the frontend and backend run on different domains. We keep CORS as the primary approach so development matches production behavior.
 

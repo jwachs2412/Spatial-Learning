@@ -14,6 +14,26 @@ In this step, you create the project structure, install dependencies, and config
 
 ---
 
+## Words We'll Use for Setup (Define Once, Use Forever)
+
+If any of these feel new, skim this list before continuing. Every command in this lesson uses one or more of these tools.
+
+- **Terminal** (also called "shell" or "command line") — a text-only way to tell your computer what to do. Instead of clicking, you type. Every Mac has the `Terminal` app; every Windows machine has PowerShell or CMD.
+- **Command** — one line you type into the terminal and press Enter. `mkdir dev-pulse` is a command.
+- **Directory / Folder** — same thing. Programmers say "directory" more often; everyone else says "folder."
+- **`cd` (change directory)** — a terminal command for "move into this folder." `cd dev-pulse` means "from wherever you are now, step into the `dev-pulse` folder."
+- **`mkdir` (make directory)** — "create a new folder here." `mkdir server` creates an empty folder named `server`.
+- **`ls` (list)** — "show me what's in this folder." Handy if you're not sure where you are.
+- **`pwd` (print working directory)** — "tell me the full path of where I am right now."
+- **`git`** — a version control tool. It tracks every change you make to your files so you can undo mistakes, collaborate, and see history. `git init` starts tracking a folder.
+- **`node`** — the program that runs JavaScript outside the browser. When you write a backend in JavaScript/TypeScript, Node runs it.
+- **`npm` (Node Package Manager)** — a tool that comes with Node. It installs third-party code (called "packages") into your project. `npm install express` downloads the Express package.
+- **Package** — a bundle of pre-written code someone else published. Instead of writing your own HTTP server from scratch, you install `express` and use theirs.
+- **`package.json`** — a file in your project that lists which packages you use, which scripts you can run, and some metadata about your project. Think of it as the project's ID card.
+- **`node_modules/`** — the folder where `npm install` downloads every package. It can easily contain tens of thousands of files and hundreds of megabytes. Never commit this folder to git — just list it in `.gitignore` and let `npm install` rebuild it on each machine.
+
+---
+
 ## 1. Create the Project Root
 
 > **Key Concept: Project Root**
@@ -26,11 +46,18 @@ mkdir dev-pulse
 cd dev-pulse
 ```
 
+**Reading those two commands:**
+
+- `mkdir dev-pulse` — "make a new folder named `dev-pulse` in the current location." Nothing else happens; you're still outside the folder.
+- `cd dev-pulse` — "step into the `dev-pulse` folder." Now every command you type runs inside that folder. (Verify with `pwd` if you're curious — it will print the full path ending in `/dev-pulse`.)
+
 ### Initialize Git
 
 ```bash
 git init
 ```
+
+**What this does:** `git init` creates a hidden folder called `.git` inside the current directory. That hidden folder is git's database where it stores the history of every change you make. You won't touch `.git` directly — you only talk to it through commands like `git add`, `git commit`, `git status`. After this command, the folder is a **repository** (repo for short).
 
 ### Create .gitignore
 
@@ -76,6 +103,18 @@ coverage/
 
 </details>
 
+### Reading the `.gitignore` Syntax
+
+A `.gitignore` file is very simple — plain text, one pattern per line. Git reads it and skips any matching files when you run `git add`.
+
+- `# anything after a hash is a comment.` Ignored by git; only for humans.
+- A bare name like `node_modules/` means "ignore anything at any depth named `node_modules/`." The trailing slash means "this is a folder."
+- `.env` with a leading dot is a **hidden file** on Unix-like systems. Git ignores them by filename, same as any other name.
+- `*.log` uses a **wildcard**. `*` matches anything, so this ignores `error.log`, `debug.log`, `anything.log` — every file ending in `.log`.
+- `npm-debug.log*` means "files starting with `npm-debug.log` and having anything after it" — catches `npm-debug.log.1`, `npm-debug.log.2025-01-01`, etc.
+
+**Pro tip:** If you run `git status` and see a file you didn't expect in the "Untracked files" list, add a matching line to `.gitignore` — don't commit things you don't mean to track.
+
 ---
 
 ## 2. Set Up the Frontend (React + TypeScript)
@@ -87,20 +126,27 @@ coverage/
 npm create vite@latest client -- --template react-ts
 ```
 
-**What this command does:**
+**Reading this command piece-by-piece (it's more than it looks):**
 
-| Part | Meaning |
-|------|---------|
-| `npm create vite@latest` | Run Vite's project scaffolding tool |
-| `client` | Name the folder `client` |
-| `--` | Separator — everything after this is passed to Vite |
-| `--template react-ts` | Use the React + TypeScript template |
+- `npm` — the Node package manager. This is the program you're telling what to do.
+- `create vite@latest` — a special npm subcommand. It reads as "find the latest published version of the `create-vite` package, download it temporarily, and run it." You don't permanently install anything.
+- `client` — the first argument to `create-vite`. It interprets this as "create the new project in a folder named `client`."
+- `--` — a special separator. Everything **before** it belongs to npm; everything **after** it is passed through to the tool npm is running (Vite, in this case). Without `--`, npm might try to interpret the flags itself.
+- `--template react-ts` — two words passed to Vite. `--template` is a flag that accepts a name; `react-ts` is the template identifier (React with TypeScript).
+
+When you run this, Vite walks through a small set of questions (or skips them because the template is specified) and fills in the `client/` folder with a working React + TypeScript starter project.
 
 ```bash
 cd client
 npm install
 cd ..
 ```
+
+**What each line does:**
+
+- `cd client` — step into the folder Vite just created.
+- `npm install` — read this project's `package.json`, look at its list of dependencies, and download each one into `node_modules/`. The first time this runs it can take 30–60 seconds and download hundreds of MB. Subsequent runs are much faster because npm caches packages.
+- `cd ..` — `..` means "the parent folder." So this steps back out to `dev-pulse/`.
 
 ### ✅ Checkpoint
 
@@ -120,6 +166,12 @@ cd server
 npm init -y
 ```
 
+**Reading these three commands:**
+
+- `mkdir -p server/src` — `-p` (parents) means "create any missing parent folders too." This creates `server/` and `server/src/` in one go. Without `-p`, `mkdir server/src` would fail because `server/` doesn't exist yet.
+- `cd server` — step into the new `server/` folder.
+- `npm init -y` — "create a fresh `package.json` file with default values." The `-y` flag means "say yes to every default, don't prompt me." After this, you'll see a new `package.json` with your project name, version `1.0.0`, and empty sections for dependencies and scripts.
+
 ### Install Dependencies
 
 > **Key Concept: Dependencies vs DevDependencies**
@@ -132,6 +184,20 @@ npm install express cors
 # TypeScript and development tools
 npm install typescript ts-node nodemon
 ```
+
+**Reading `npm install <names...>`:**
+
+- `npm install` = "go to the npm registry (npm's central package catalog on the internet), download these packages, and record them in my `package.json`."
+- You can list multiple names in one command, space-separated. Each one becomes an entry under `"dependencies"` in `package.json` automatically.
+- Lines starting with `#` in a shell block are **shell comments** — they exist in this README for your benefit; you can copy/paste the whole block and the comments won't run anything.
+
+The four packages we're installing here:
+
+- **`express`** — a small framework that makes it easy to define HTTP routes in Node.js. Without it, building a web server from scratch is hundreds of lines; with it, it's a few.
+- **`cors`** — the CORS middleware package we talked about in Step 1. Adds the right response headers so the browser lets the frontend talk to the backend.
+- **`typescript`** — the TypeScript compiler. Turns `.ts` files into `.js` files so Node can run them.
+- **`ts-node`** — a tool that lets you skip the compile step during development: it compiles and runs `.ts` files in one go.
+- **`nodemon`** — watches your source files and automatically restarts your server every time you save a change. Saves you from manually restarting.
 
 ### Install Type Definitions
 
@@ -192,20 +258,30 @@ Create `server/tsconfig.json`:
 
 </details>
 
-**Line-by-line breakdown:**
+### Reading `tsconfig.json` Line-by-Line
 
-| Setting | What It Does | Why It Matters |
-|---------|-------------|----------------|
-| `"target": "ES2020"` | Compile to ES2020 JavaScript | Modern enough for Node.js 20+, no unnecessary transpilation |
-| `"module": "commonjs"` | Use `require()`/`module.exports` style | Node.js standard module system |
-| `"lib": ["ES2020"]` | Include ES2020 standard library types | Gives you `Promise`, `Map`, `Set`, etc. |
-| `"outDir": "./dist"` | Put compiled JS in `dist/` folder | Keeps compiled output separate from source |
-| `"rootDir": "./src"` | Source code lives in `src/` | Tells compiler where to find your TypeScript |
-| `"strict": true` | Enable all strict type checks | Catches bugs at compile time, not runtime |
-| `"esModuleInterop": true` | Allow `import x from 'y'` syntax | Makes imports work consistently |
-| `"skipLibCheck": true` | Don't type-check `node_modules` | Faster compilation |
-| `"types": ["node"]` | Include Node.js type definitions | **Critical:** Without this, `process`, `console`, and `setTimeout` cause errors |
-| `"sourceMap": true` | Generate `.map` files | Maps compiled JS back to TypeScript for debugging |
+First, the shape. `tsconfig.json` is a JSON file (same syntax rules you learned in Step 1 — double-quoted keys, no trailing commas). It has two top-level sections:
+
+- `"compilerOptions"` — an object listing settings the TypeScript compiler should honor.
+- `"include"` / `"exclude"` — arrays telling the compiler which files to read and which to skip.
+
+Now every setting, one at a time:
+
+- `"target": "ES2020"` — when the compiler produces JavaScript, use the ES2020 feature set. ES2020 is the version of JavaScript finalized in 2020. Modern Node.js supports it natively, so the compiler doesn't have to rewrite newer syntax into older equivalents.
+- `"module": "commonjs"` — use Node's traditional module system. You write `import`/`export` in your TypeScript; the compiler converts that to Node's `require(...)` and `module.exports` under the hood.
+- `"lib": ["ES2020"]` — which standard-library type definitions to load. Ensures you can use `Promise`, `Map`, `Array.prototype.flat`, and other ES2020-era features without TypeScript complaining "I've never heard of that."
+- `"outDir": "./dist"` — when you run `tsc` (the compiler), put the output `.js` files here. `./` means "relative to this config file." So `./dist` resolves to `server/dist/`.
+- `"rootDir": "./src"` — your source `.ts` files live here. Tells the compiler where to start looking.
+- `"strict": true` — turn on every strict type-checking rule. This is one setting that flips on many. You'll get more errors up front, but each one is protecting you from a real bug.
+- `"esModuleInterop": true` — a compatibility shim. Makes `import express from 'express'` work cleanly even for packages that use older module styles. Without this, you'd have to write `import * as express from 'express'` instead.
+- `"skipLibCheck": true` — don't type-check the `.d.ts` (type definition) files that come with other packages. Those files are maintained by their authors and checking them slows compilation without catching real bugs.
+- `"forceConsistentCasingInFileNames": true` — case-sensitivity enforcement. Prevents bugs where a file is referenced as `MyFile.ts` on one machine and `myfile.ts` on another (Linux servers care about case; macOS often doesn't).
+- `"resolveJsonModule": true` — lets you `import data from './data.json'` and have TypeScript treat the file as a typed object.
+- `"declaration": true`, `"declarationMap": true` — output `.d.ts` files (type definitions) for your own code. Useful if this project is consumed by another.
+- `"sourceMap": true` — output `.js.map` files. When your compiled JavaScript throws an error, these maps let debuggers show you the original TypeScript line instead of the compiled JS line.
+- `"types": ["node"]` — **critical**. Load the Node.js type definitions so `process`, `console`, `setTimeout`, and `Buffer` are known globals. Without this, TypeScript doesn't even know `console.log` exists.
+- `"include": ["src/**/*"]` — compile every file inside `src/` (at any depth — `**` means "any number of subfolders").
+- `"exclude": ["node_modules", "dist"]` — skip these folders. You never want to compile downloaded packages or your own previous compile output.
 
 > ⚠️ **Common Mistake: Missing `"types": ["node"]`**
 > Without this setting, TypeScript doesn't know about Node.js globals like `process.env`, `console.log`, or `setTimeout`. You'll see errors like:
@@ -228,11 +304,19 @@ Open `server/package.json` and replace the `"scripts"` section:
 }
 ```
 
-| Script | What It Does | When You Use It |
-|--------|-------------|-----------------|
-| `dev` | Runs your server with auto-restart on file changes | During development |
-| `build` | Compiles TypeScript to JavaScript | Before deployment |
-| `start` | Runs the compiled JavaScript | In production |
+**What "scripts" are:** an object inside `package.json` that maps **short names** to **commands**. When you type `npm run dev`, npm looks up the `dev` script and runs the command string exactly as written. Scripts save you from memorizing long commands.
+
+Reading each script:
+
+- `"dev": "nodemon --exec ts-node src/index.ts"`
+  - Run `nodemon` (the file watcher).
+  - `--exec ts-node` tells nodemon, "use `ts-node` to execute the file, not plain `node`." That way your `.ts` source runs without a separate compile step.
+  - `src/index.ts` is the entry file — the one file Node starts with.
+  - When you save any `.ts` file, nodemon restarts the process. You never have to Ctrl+C and re-run by hand.
+- `"build": "tsc"`
+  - `tsc` is the TypeScript compiler. With no arguments, it reads `tsconfig.json` and compiles everything in `src/` to `dist/`. Used before deploying.
+- `"start": "node dist/index.js"`
+  - Run the compiled JavaScript file with plain Node. In production, servers run the already-compiled `.js`, not the `.ts` source — it's faster and doesn't require `ts-node` to be installed.
 
 ### Verify your package.json dependencies
 
@@ -356,12 +440,14 @@ Prettier configuration — create `.prettierrc` in the project root:
 }
 ```
 
-| Setting | What It Does |
-|---------|-------------|
-| `"semi": true` | Always use semicolons |
-| `"singleQuote": true` | Use `'` instead of `"` in JavaScript/TypeScript (JSON always uses `"`) |
-| `"tabWidth": 2` | 2-space indentation (industry standard for JS/TS) |
-| `"trailingComma": "all"` | Add commas after the last item in lists (makes diffs cleaner) |
+**What Prettier is:** a tool that reformats your code automatically so every file in the project looks identical in style — no manual nitpicking over spaces or quote style. It reads `.prettierrc` for its rules.
+
+Reading each rule:
+
+- `"semi": true` — always put semicolons at the end of statements. (Some styles skip them; we opt in.)
+- `"singleQuote": true` — prefer `'single quotes'` over `"double quotes"` in JavaScript/TypeScript. Note that JSON files always use double quotes regardless — this rule only affects JS/TS.
+- `"tabWidth": 2` — indent nested lines with 2 spaces. Two is the industry standard for JS/TS; four is common in Python.
+- `"trailingComma": "all"` — put a comma after the last item in arrays and objects. Looks odd at first, but it makes diffs cleaner (adding a new last item only changes that one line).
 
 ---
 
@@ -371,6 +457,14 @@ Prettier configuration — create `.prettierrc` in the project root:
 git add .
 git commit -m "feat: scaffold dev-pulse project with client and server"
 ```
+
+**Reading these two git commands:**
+
+- `git add .` — "stage every file I've changed or added in the current folder (and its subfolders)." `.` is a shorthand for "everything here." Staging means "mark these changes as ready to be saved."
+  - Because your `.gitignore` is in place, `node_modules/` and anything else listed there is skipped automatically.
+- `git commit -m "..."` — "save the staged changes as a new commit with this message." A commit is a single snapshot in your project's history.
+  - `-m` is short for "message" — the text after it is the commit message. It's a one-line summary of what you changed.
+  - Messages starting with `feat:`, `fix:`, `docs:`, etc. follow a convention called **Conventional Commits**. Not required, but it makes history scannable: `feat:` = new feature, `fix:` = bug fix, `docs:` = documentation, `refactor:` = internal cleanup.
 
 ### ✅ Checkpoint
 

@@ -46,13 +46,20 @@ cd server
 npm run build
 ```
 
-This runs `tsc` and compiles your TypeScript to JavaScript in the `dist/` folder. If this fails, fix the TypeScript errors before deploying — the deployment platform will run the same command.
+**What this does under the hood:**
+
+- `npm run build` — npm looks up the `build` script you defined in `package.json` (Step 2). That script is `"build": "tsc"`, so npm runs `tsc` — the TypeScript compiler.
+- `tsc` reads your `tsconfig.json` and walks every `.ts` file inside `src/`. It converts each one to plain JavaScript and writes the result into `dist/`, preserving the folder structure. Your `src/index.ts` becomes `dist/index.js`; your `src/routes/entries.ts` becomes `dist/routes/entries.js`. Types are stripped out (TypeScript types only exist at build time).
+- If `tsc` finds a type error, it prints a message and exits with a non-zero code. Your deployment platform will run this exact command and reject the deploy on any error, so fix everything locally first.
 
 ```bash
 npm start
 ```
 
-This runs `node dist/index.js` — the compiled version. Verify `http://localhost:3001/api/health` works.
+**What this does:**
+
+- Looks up the `start` script in `package.json`. It's `"start": "node dist/index.js"`, so npm runs `node dist/index.js`.
+- `node <file>` runs a JavaScript file with Node.js. Notice we're pointing at `dist/index.js` — the compiled output — not `src/index.ts`. That's what production will do. Verify `http://localhost:3001/api/health` works.
 
 ### ✅ Checkpoint
 
@@ -83,6 +90,12 @@ git remote add origin git@github.com:yourusername/dev-pulse.git
 git branch -M main
 git push -u origin main
 ```
+
+**Reading the manual sequence (in case `gh` isn't installed):**
+
+- `git remote add origin <url>` — "register a nickname `origin` pointing at this remote URL." A **remote** is a copy of your repo hosted somewhere else (in this case, on GitHub). `origin` is the conventional name for the primary remote; you can have more than one.
+- `git branch -M main` — "rename the current branch to `main`." `-M` means "force rename, overwriting if `main` already exists." GitHub's default branch is `main` (formerly `master`), so we match that convention.
+- `git push -u origin main` — "push my local `main` branch up to the `origin` remote's `main` branch." `-u` (upstream) remembers the connection so later you can just type `git push` without repeating `origin main`.
 
 ---
 

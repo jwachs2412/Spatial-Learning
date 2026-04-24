@@ -42,6 +42,64 @@ Before writing components, understand these four concepts:
 
 ---
 
+## Plain-English Primer: JSX, Hooks, and Events
+
+You met the JavaScript/TypeScript basics in Step 3 (variables, functions, imports, destructuring). React adds a few extra shapes that appear in every component in this lesson.
+
+### JSX — HTML inside JavaScript
+
+```tsx
+const element = <h1>Hello, {name}</h1>;
+```
+
+- JSX is HTML-like syntax you can write directly inside a JavaScript/TypeScript file. It looks like HTML but it's actually compiled into function calls that build DOM nodes.
+- `.tsx` (instead of `.ts`) is the file extension that allows JSX syntax. Think "TypeScript eXtended with JSX."
+- Anything inside `{ }` inside JSX is a **JavaScript expression** — the value is injected into the output. `<h1>Hello, {name}</h1>` embeds the value of the variable `name`.
+- HTML attributes you already know work the same way: `<input value={text} />`, `<button disabled={isLoading}>`. When the value is a string literal you can use quotes (`type="text"`); when it's a variable you use `{ }`.
+- Two gotchas: in JSX you write `className` instead of `class` (because `class` is a reserved word in JavaScript), and `htmlFor` instead of `for`.
+
+### Components — Functions That Return JSX
+
+```tsx
+function Greeting({ name }) {
+  return <h1>Hello, {name}</h1>;
+}
+```
+
+- A **component** is just a function whose name starts with a capital letter (React uses the capitalization to tell your components apart from HTML tags).
+- It takes one argument — an object of **props** — and returns JSX.
+- You call it by writing it like a tag: `<Greeting name="Jo" />`. React handles the translation.
+- `{ name }` in the parameter list is destructuring — pulling `name` out of the props object.
+
+### Hooks — Functions That Start With `use`
+
+Hooks are special functions React provides that let you add features to a component. Two you'll meet in this lesson:
+
+- **`useState(initialValue)`** — returns a pair: `[value, setValue]`. The value is the current state; `setValue` is a function that updates it and triggers a re-render.
+- **`useEffect(fn, deps)`** — runs `fn` after the component renders. `deps` is an array of values the effect depends on; if you pass `[]`, the effect runs only once on first render.
+
+```tsx
+const [count, setCount] = useState(0);   // reads: count = 0, setCount is the updater
+setCount(count + 1);                     // triggers a re-render with count = 1
+```
+
+The `[value, setValue]` on the left is **array destructuring** — a compact way to name the two items `useState` returns.
+
+### Events — Responding to User Input
+
+```tsx
+<button onClick={() => setCount(count + 1)}>Click me</button>
+<input onChange={(e) => setText(e.target.value)} />
+<form onSubmit={(e) => { e.preventDefault(); /* ... */ }}>
+```
+
+- Event handler props use camelCase (`onClick`, `onChange`, `onSubmit`). They take a function — usually an arrow function.
+- `e` is the **event object** React passes to your handler. Common properties: `e.target` (the element that fired the event), `e.target.value` (the value of an input), `e.preventDefault()` (stop the browser's default behavior like form submission reloading the page).
+
+That's enough to read every React snippet in this lesson.
+
+---
+
 ## 1. Define Frontend Types
 
 Your frontend needs the same type definitions as the backend to ensure consistency.
@@ -81,6 +139,19 @@ export const MOOD_EMOJI: Record<Mood, string> = {
 ```
 
 </details>
+
+### Reading This File Line-by-Line
+
+This file exports four things: an interface, two type aliases, and two constants. All are reused across the frontend components.
+
+- `export interface MoodEntry { ... }` — same shape as the backend's `MoodEntry` but uses the `Mood` alias for the `mood` field. Defining `Mood` once and reusing it keeps the two definitions in sync.
+- `export type Mood = 'happy' | ...;` — a **type alias** for the union of allowed mood values. Wherever you see `Mood` used as a type, it means "one of those five exact strings."
+- `export type CreateEntryRequest = Omit<MoodEntry, 'id' | 'createdAt'>;` — same pattern as the backend: "MoodEntry minus the server-generated fields."
+- `export const MOODS: Mood[] = [ ... ];` — a **constant array** of all valid moods. The type annotation `Mood[]` says every item must be one of the five strings. We'll loop over this in the UI to render one button per mood.
+- `export const MOOD_EMOJI: Record<Mood, string> = { ... };`
+  - `Record<K, V>` is a built-in TypeScript utility type that reads as "an object with keys of type K and values of type V."
+  - `Record<Mood, string>` means "an object that has **every** `Mood` value as a key, each mapped to a string." TypeScript will error if you miss one of the five keys or add an unknown one.
+  - This is how we attach emoji metadata to each mood without storing it inside each entry.
 
 **Why duplicate types between frontend and backend?** In a monorepo, you could share a types package. But keeping them separate for now teaches you that the frontend and backend are independent applications that communicate through a contract (the API). The types on each side describe what that contract looks like.
 
@@ -139,16 +210,86 @@ export async function createEntry(data: CreateEntryRequest): Promise<MoodEntry> 
 
 </details>
 
-**Line-by-line breakdown:**
+### Reading This File Line-by-Line
 
-| Line | What It Does | Why |
-|------|-------------|-----|
-| `import.meta.env.VITE_API_URL` | Read API URL from environment variable | Different URLs for development (`localhost:3001`) vs production (your Render URL) |
-| `\|\| 'http://localhost:3001/api'` | Fallback for local development | So you don't need a `.env` file just to run locally |
-| `if (!response.ok)` | Check if status is 2xx | A 400 or 500 response is NOT an exception — `fetch` only throws on network failures. You must check manually. |
-| `'Content-Type': 'application/json'` | Tell the server you're sending JSON | Without this header, the server can't parse your request body |
-| `JSON.stringify(data)` | Convert JavaScript object to JSON string | `fetch` doesn't auto-convert objects. You must serialize them. |
-| `return response.json()` | Parse the JSON response into a JavaScript object | The response body is a text stream. `.json()` parses it. |
+```typescript
+import { MoodEntry, CreateEntryRequest } from '../types';
+```
+
+Named imports of two types from our types file. `../` means "up one folder." We're in `services/`, so `../types` resolves to `../types/index.ts`.
+
+```typescript
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+```
+
+- `import.meta.env` is Vite's way of exposing environment variables to the frontend at build time. (`process.env` is the Node/backend equivalent.)
+- `VITE_API_URL` — Vite only exposes variables whose names start with `VITE_`. This prevents accidentally shipping backend secrets in the frontend bundle.
+- `|| 'http://localhost:3001/api'` — fallback for local development when the env var isn't set.
+
+```typescript
+export async function getEntries(): Promise<MoodEntry[]> {
+```
+
+- `export async function` — an exported async function. The `async` keyword means the function uses `await` inside and returns a promise.
+- `Promise<MoodEntry[]>` — the return type. Resolves to an array of `MoodEntry` objects.
+
+```typescript
+const response = await fetch(`${API_URL}/entries`);
+```
+
+- `fetch(url)` is the built-in browser function for making HTTP requests. It returns a promise that resolves to a `Response` object.
+- `await` waits for the promise to resolve.
+- `` `${API_URL}/entries` `` — template literal: in development, `API_URL` is `http://localhost:3001/api`, so this becomes `http://localhost:3001/api/entries`.
+
+```typescript
+if (!response.ok) {
+  throw new Error(`Failed to fetch entries: ${response.status}`);
+}
+```
+
+- `response.ok` is `true` if the status code is in the 200–299 range.
+- **Critical:** `fetch` does NOT throw on HTTP errors (400, 500, etc.). It only throws on network failures (no internet, DNS failure, etc.). You must check `response.ok` yourself.
+- `throw new Error(...)` manually throws an error. `throw` creates an "exception" that bubbles up until something `catch`es it. The `Error` class wraps a human-readable message.
+
+```typescript
+return response.json();
+```
+
+- `response.json()` returns a promise that resolves to the parsed JSON body. We return that promise directly; the caller's `await` will wait for it.
+
+```typescript
+export async function createEntry(data: CreateEntryRequest): Promise<MoodEntry> {
+  const response = await fetch(`${API_URL}/entries`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+```
+
+- This time `fetch` takes two arguments: the URL and an **options object** that customizes the request.
+  - `method: 'POST'` — the HTTP method. Default is `GET`.
+  - `headers: { 'Content-Type': 'application/json' }` — tells the server the body is JSON. Without this, Express's `express.json()` middleware can't parse it and `req.body` would be `undefined`.
+  - `body: JSON.stringify(data)` — `fetch` requires the body to be a string. `JSON.stringify(obj)` converts a JavaScript object into a JSON-formatted string. Without `stringify`, `fetch` would send `"[object Object]"` as text.
+
+```typescript
+if (!response.ok) {
+  const errorData = await response.json().catch(() => ({ errors: ['Request failed'] }));
+  throw new Error(errorData.errors?.join(', ') || 'Failed to create entry');
+}
+```
+
+- If the request failed, read the error body and throw.
+- `response.json().catch(() => ({ errors: ['Request failed'] }))` — `.catch(handler)` is the method form of try/catch for promises. If the body can't be parsed as JSON (e.g., empty response), fall back to a default error shape.
+- `errorData.errors?.join(', ')` — `?.` is the **optional chaining operator**. If `errorData.errors` is `undefined` or `null`, the whole expression evaluates to `undefined` instead of throwing. Then `||` falls back to the generic message.
+
+```typescript
+return response.json();
+}
+```
+
+Success path — parse and return the JSON body as a `MoodEntry`.
 
 > ⚠️ **Common Mistake: `fetch` doesn't throw on HTTP errors**
 > Unlike `axios`, `fetch` does NOT throw an error for 400 or 500 responses. It only throws on network failures (no internet, server unreachable). You must check `response.ok` yourself. Forgetting this means errors silently pass through.
@@ -272,15 +413,148 @@ export function EntryForm({ onSubmit }: EntryFormProps) {
 
 </details>
 
-**Key patterns explained:**
+### Reading This File Line-by-Line
 
-| Pattern | What It Does | Why |
-|---------|-------------|-----|
-| `e.preventDefault()` | Stops the browser's default form submission (which would reload the page) | React handles submissions, not the browser |
-| `try/catch/finally` | Handle success, errors, and cleanup | `finally` runs whether or not there was an error — perfect for resetting `isSubmitting` |
-| `disabled={isSubmitting}` | Prevent double-clicks while saving | Without this, users can spam the submit button and create duplicate entries |
-| `type="button"` on mood buttons | Prevents these buttons from submitting the form | By default, buttons inside a form have `type="submit"`. Only the actual submit button should submit. |
-| `err instanceof Error ? err.message : 'Something went wrong'` | Safely extract the error message | Not all thrown values are Error objects. This handles both cases. |
+This is the densest component in Level 1. We'll work through it in four chunks: **setup**, **state**, **handler**, and **JSX**.
+
+#### Chunk 1: Imports and Props
+
+```tsx
+import { useState, FormEvent } from 'react';
+import { CreateEntryRequest, Mood, MOODS, MOOD_EMOJI } from '../types';
+
+interface EntryFormProps {
+  onSubmit: (data: CreateEntryRequest) => Promise<void>;
+}
+```
+
+- `useState` is the React hook; `FormEvent` is a type describing form submission events.
+- `interface EntryFormProps { ... }` — defines the shape of props this component accepts. By convention: `<ComponentName>Props`.
+- `onSubmit: (data: CreateEntryRequest) => Promise<void>` — a prop typed as a function. Read as "a function that takes a `CreateEntryRequest` and returns a `Promise<void>` (a promise that resolves to nothing)." The parent will pass a real async function here.
+
+#### Chunk 2: Component Signature and State
+
+```tsx
+export function EntryForm({ onSubmit }: EntryFormProps) {
+  const [mood, setMood] = useState<Mood>('neutral');
+  const [energy, setEnergy] = useState(3);
+  const [note, setNote] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+```
+
+- `function EntryForm({ onSubmit }: EntryFormProps)` — component name starts with capital, props are destructured (pulling `onSubmit` out), and the props object is typed with our interface.
+- `useState<Mood>('neutral')` — `useState` is a function that returns a tuple (pair) of `[currentValue, setter]`. The `<Mood>` in angle brackets is a **type argument**, telling TypeScript "this state holds a `Mood` value." We destructure into `[mood, setMood]` — `mood` is the current value, `setMood` is the function that changes it.
+- `useState(3)` — when you pass a plain initial value, TypeScript infers the type automatically. `energy` is inferred as `number`.
+- `new Date().toISOString().split('T')[0]`:
+  - `new Date()` — current date/time.
+  - `.toISOString()` — produces a string like `"2025-01-15T14:32:01.000Z"`.
+  - `.split('T')` — splits that string at the `"T"`, producing `["2025-01-15", "14:32:01.000Z"]`.
+  - `[0]` — takes the first part, just `"2025-01-15"`. That's what HTML's `<input type="date">` expects.
+- `useState(false)` — boolean, `false` initially. Used to disable the button while submitting.
+- `useState('')` — empty string for the error message.
+
+#### Chunk 3: The Submit Handler
+
+```tsx
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  setError('');
+  setIsSubmitting(true);
+
+  try {
+    await onSubmit({ mood, energy, note, date });
+    // Reset form on success
+    setMood('neutral');
+    setEnergy(3);
+    setNote('');
+    setDate(new Date().toISOString().split('T')[0]);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Something went wrong');
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+```
+
+- `const handleSubmit = async (e: FormEvent) => { ... }` — an async arrow function typed with the `FormEvent` parameter. Defined inside the component so it has access to the state setters via closure.
+- `e.preventDefault()` — prevents the browser's default form submission (which would reload the page with form data in the URL). React handles submission via our `onSubmit` prop.
+- `setError('')`, `setIsSubmitting(true)` — reset any previous error, mark as submitting (disables the submit button in the UI).
+- `try { ... } catch (err) { ... } finally { ... }`:
+  - `try` — code that might throw.
+  - `catch (err)` — runs if anything inside `try` throws. `err` is the thrown value.
+  - `finally` — runs after either `try` or `catch`, no matter what. Perfect for cleanup.
+- `await onSubmit({ mood, energy, note, date })` — call the parent's submit handler. Curly braces here are an **object literal** — shorthand form, equivalent to `{ mood: mood, energy: energy, note: note, date: date }`.
+- Reset the form fields on success.
+- `err instanceof Error ? err.message : 'Something went wrong'`
+  - `err instanceof Error` — checks whether the thrown value is actually an `Error` object (not everything thrown has to be).
+  - Ternary: if it's an Error, use its message; otherwise fall back to a generic.
+
+#### Chunk 4: The JSX
+
+```tsx
+return (
+  <form onSubmit={handleSubmit} className="entry-form">
+    <h2>How are you feeling?</h2>
+
+    {error && <p className="error">{error}</p>}
+```
+
+- `<form onSubmit={handleSubmit}>` — when the form submits, call `handleSubmit`. React wires up the DOM event for us.
+- `className="entry-form"` — JSX's version of HTML's `class`. Named differently because `class` is a reserved keyword in JavaScript.
+- `{error && <p>...</p>}` — **conditional rendering trick**. `&&` short-circuits: if `error` is a truthy value (a non-empty string), the right side evaluates and renders. If `error` is empty (falsy), the whole expression is `''` and React renders nothing.
+
+```tsx
+    <div className="mood-selector">
+      {MOODS.map((m) => (
+        <button
+          key={m}
+          type="button"
+          className={`mood-btn ${mood === m ? 'active' : ''}`}
+          onClick={() => setMood(m)}
+        >
+          {MOOD_EMOJI[m]} {m}
+        </button>
+      ))}
+    </div>
+```
+
+- `MOODS.map((m) => (...))` — `.map` transforms each item in the array into something else. Here it returns one `<button>` per mood. The parentheses around `(...)` wrap the JSX we're returning from the arrow function.
+- `key={m}` — when rendering a list in React, each item must have a unique `key`. React uses this to efficiently update the DOM when items change. Here, each mood string is unique, so it works as the key.
+- `type="button"` — by default, `<button>` elements inside a `<form>` submit the form. We want these mood buttons to NOT submit, so we override their type.
+- `className={\`mood-btn ${mood === m ? 'active' : ''}\`}` — a template literal building a dynamic class string. If this button's mood matches the selected mood, add the `active` class.
+- `onClick={() => setMood(m)}` — arrow function that, when clicked, updates state. `m` is captured from the `.map` iteration.
+
+```tsx
+    <div className="energy-selector">
+      <label>Energy Level: {energy}/5</label>
+      <input
+        type="range"
+        min="1"
+        max="5"
+        value={energy}
+        onChange={(e) => setEnergy(Number(e.target.value))}
+      />
+    </div>
+```
+
+- `<input type="range">` — HTML's slider input.
+- `value={energy}` — **controlled input**. React controls the input's value; the state is the source of truth. This is the React way: every keystroke/move triggers `onChange`, updates state, re-renders with the new value.
+- `onChange={(e) => setEnergy(Number(e.target.value))}` — when the slider moves, `e.target.value` is the new value as a string (all HTML input values are strings). `Number(...)` converts it to a number before storing in state.
+
+```tsx
+    <button type="submit" className="submit-btn" disabled={isSubmitting}>
+      {isSubmitting ? 'Saving...' : 'Log Entry'}
+    </button>
+  </form>
+);
+}
+```
+
+- `type="submit"` — this is the only button that actually submits the form.
+- `disabled={isSubmitting}` — React sets the HTML `disabled` attribute when `isSubmitting` is true, preventing double-clicks.
+- `{isSubmitting ? 'Saving...' : 'Log Entry'}` — ternary inside JSX, swapping the button text based on state.
 
 ### 🧠 Debugging Exercise
 
@@ -352,14 +626,75 @@ export function EntryList({ entries }: EntryListProps) {
 
 </details>
 
-**Key patterns:**
+### Reading This File Line-by-Line
 
-| Pattern | What It Does | Why |
-|---------|-------------|-----|
-| `key={entry.id}` | Unique identifier for each list item | React uses keys to efficiently update the DOM. Without unique keys, React can't tell which items changed. |
-| `entries.length === 0` check | Show a helpful message when empty | Better UX than showing nothing |
-| `{entry.note && <p>...}` | Only render the note paragraph if there is a note | Avoids empty `<p>` tags |
-| `'⚡'.repeat(entry.energy)` | Visual energy indicator | More readable than just a number |
+```tsx
+import { MoodEntry, MOOD_EMOJI } from '../types';
+
+interface EntryListProps {
+  entries: MoodEntry[];
+}
+```
+
+- Named imports again. `MOOD_EMOJI` is the object mapping moods to emoji.
+- Props interface: `entries` is an array of `MoodEntry`.
+
+```tsx
+export function EntryList({ entries }: EntryListProps) {
+  if (entries.length === 0) {
+    return (
+      <div className="empty-state">
+        <p>No entries yet. Log your first mood above!</p>
+      </div>
+    );
+  }
+```
+
+- `if (entries.length === 0)` — **early return** for the empty case. Showing a helpful message beats showing a blank space.
+- A component can have multiple `return` statements; React uses whichever one the control flow reaches.
+
+```tsx
+  return (
+    <div className="entry-list">
+      <h2>Your Entries</h2>
+      {entries.map((entry) => (
+        <div key={entry.id} className="entry-card">
+```
+
+- `entries.map((entry) => (...))` — one card per entry. Same `.map` pattern as EntryForm.
+- `key={entry.id}` — the entry's database-style ID is perfect as a key because it's guaranteed unique.
+
+```tsx
+          <div className="entry-header">
+            <span className="entry-mood">
+              {MOOD_EMOJI[entry.mood]} {entry.mood}
+            </span>
+            <span className="entry-date">{entry.date}</span>
+          </div>
+```
+
+- `MOOD_EMOJI[entry.mood]` — look up the emoji using the mood as a key. If `entry.mood` is `'happy'`, this evaluates to `'😊'`.
+
+```tsx
+          <div className="entry-energy">
+            Energy: {'⚡'.repeat(entry.energy)}{'○'.repeat(5 - entry.energy)}
+          </div>
+```
+
+- `'⚡'.repeat(entry.energy)` — every string has a `.repeat(n)` method that returns the string repeated `n` times. `'⚡'.repeat(3)` is `'⚡⚡⚡'`.
+- `'○'.repeat(5 - entry.energy)` — fills the rest with empty circles so every row is 5 characters wide.
+- Together: `⚡⚡⚡○○` for energy 3, `⚡⚡⚡⚡⚡` for energy 5.
+
+```tsx
+          {entry.note && <p className="entry-note">{entry.note}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+- `{entry.note && <p>...</p>}` — conditional rendering again. If the note is empty (falsy), skip the paragraph entirely; otherwise render it.
 
 ---
 
@@ -417,6 +752,64 @@ export function MoodChart({ entries }: MoodChartProps) {
 ```
 
 </details>
+
+### Reading This File Line-by-Line
+
+This component introduces `reduce`, `filter`, and inline styles — three patterns worth unpacking.
+
+```tsx
+if (entries.length === 0) return null;
+```
+
+- Early return. `return null` is React's way of saying "render nothing." The component has no output on an empty list.
+
+```tsx
+const moodCounts = MOODS.reduce(
+  (acc, mood) => {
+    acc[mood] = entries.filter((e) => e.mood === mood).length;
+    return acc;
+  },
+  {} as Record<Mood, number>,
+);
+```
+
+`reduce` is an array method that **boils an array down into a single value**. Unlike `.map` (which returns a new array of the same length) or `.filter` (which returns a smaller array), `.reduce` can produce anything — a number, an object, another array.
+
+- Signature: `array.reduce(callback, initialValue)`.
+- `callback` gets two arguments: `acc` (the "accumulator" — the running total) and each array item in turn.
+- The callback returns the new accumulator for the next iteration.
+
+Let's trace through:
+
+- Initial value: `{} as Record<Mood, number>` — an empty object, told by TypeScript to treat it as "an object with Mood keys and number values." We need the cast because an empty object doesn't yet have all the required keys.
+- First iteration: `mood = 'happy'`. We do `acc['happy'] = entries.filter(...).length`, then return the updated `acc`.
+  - `entries.filter((e) => e.mood === 'happy')` — returns a new array containing only entries whose mood equals `'happy'`.
+  - `.length` — how many matched.
+- Second iteration: `mood = 'neutral'`. We fill in `acc['neutral']`. And so on.
+- Final result: `{ happy: 3, neutral: 2, sad: 0, frustrated: 1, energized: 4 }` — counts for every mood.
+
+```tsx
+const maxCount = Math.max(...Object.values(moodCounts));
+```
+
+- `Object.values(obj)` — built-in method that returns an array of the object's values, ignoring the keys. Here: `[3, 2, 0, 1, 4]`.
+- `Math.max(...)` — built-in that returns the biggest of its arguments. But `Math.max` takes individual arguments, not an array — so we use the **spread operator** (`...`) to unpack the array into separate arguments.
+- `Math.max(3, 2, 0, 1, 4)` → `4`.
+
+```tsx
+<div
+  className="chart-bar"
+  style={{
+    height: `${maxCount > 0 ? (moodCounts[mood] / maxCount) * 100 : 0}%`,
+  }}
+/>
+```
+
+- `style={{ ... }}` — **inline styles** in JSX. The **outer** `{ }` are JSX saying "expression coming"; the **inner** `{ }` are an object literal. So `style={{ height: '50%' }}` is actually passing one object with a `height` field.
+- CSS properties use camelCase in JSX (`backgroundColor`, `fontSize`) instead of kebab-case (`background-color`, `font-size`).
+- The height calculation: if `maxCount > 0`, height = this mood's proportion of the max × 100%. Otherwise 0%. Ensures bars scale relative to the tallest.
+
+`<div ... />` — a **self-closing tag** for elements with no children. Same rule as HTML but required in JSX (HTML is more lenient).
 
 ---
 
@@ -501,13 +894,97 @@ export default App;
 
 </details>
 
-**Important patterns:**
+### Reading This File Line-by-Line
 
-| Pattern | What It Does | Why |
-|---------|-------------|-----|
-| `useEffect(() => { ... }, [])` | Runs once when the component mounts | The empty `[]` dependency array means "run this once, not on every render" |
-| `setEntries((prev) => [newEntry, ...prev])` | Add new entry to the front of the array | Uses the callback form of setState to avoid stale state. New entries appear at the top. |
-| Async function inside useEffect | Handles the async API call | `useEffect` callback can't be async itself, so we define an async function inside and call it immediately |
+```tsx
+import { useState, useEffect } from 'react';
+import { MoodEntry, CreateEntryRequest } from './types';
+import { getEntries, createEntry } from './services/api';
+import { EntryForm } from './components/EntryForm';
+import { EntryList } from './components/EntryList';
+import { MoodChart } from './components/MoodChart';
+import './App.css';
+```
+
+- Two hooks, two types, two API functions, three components, and a CSS file.
+- `import './App.css';` — an import with **no name**. This is a **side-effect-only** import: Vite sees it and bundles the CSS so it's applied to the page. No variable needed.
+
+```tsx
+function App() {
+  const [entries, setEntries] = useState<MoodEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+```
+
+Three state variables: the list of entries, a loading flag (starts `true` because we need to fetch data before showing the UI), and an error message.
+
+- `useState<MoodEntry[]>([])` — tell TypeScript the state is an array of `MoodEntry`. Initial value is an empty array.
+
+```tsx
+  useEffect(() => {
+    async function loadEntries() {
+      try {
+        const data = await getEntries();
+        setEntries(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load entries');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadEntries();
+  }, []);
+```
+
+- `useEffect(fn, deps)` — run `fn` after the component renders. `deps` is the dependency array: the effect re-runs whenever any value in it changes.
+- `[]` (empty deps) — the effect runs **exactly once**, right after the first render. Perfect for initial data loading.
+- We can't write `useEffect(async () => {...}, [])` directly because React expects the effect callback to return either nothing or a cleanup function, not a promise. The workaround: **define an async function inside the effect, then call it**.
+- Inside `loadEntries`:
+  - `try` — attempt to fetch.
+  - `catch (err)` — if anything throws, extract the message and store it.
+  - `finally` — either way, turn off the loading flag.
+
+```tsx
+  const handleSubmit = async (data: CreateEntryRequest): Promise<void> => {
+    const newEntry = await createEntry(data);
+    setEntries((prev) => [newEntry, ...prev]);
+  };
+```
+
+- The function we'll pass down to `EntryForm` as the `onSubmit` prop.
+- `setEntries((prev) => [newEntry, ...prev])`:
+  - **Functional updater form** of `setState`. Instead of passing the new value, you pass a function that takes the previous value and returns the new one.
+  - `[newEntry, ...prev]` — a new array with `newEntry` first, followed by every item from `prev` (spread operator). This puts the new entry at the top of the list.
+  - Why the functional form? If multiple updates happen quickly, React guarantees each one sees the latest state. Writing `setEntries([newEntry, ...entries])` could use a stale `entries` from an earlier render.
+
+```tsx
+  if (isLoading) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  return (
+    <div className="app">
+      <header>
+        <h1>DevPulse</h1>
+        <p>Track your developer mood</p>
+      </header>
+
+      {error && <p className="error">{error}</p>}
+
+      <EntryForm onSubmit={handleSubmit} />
+      <MoodChart entries={entries} />
+      <EntryList entries={entries} />
+    </div>
+  );
+}
+
+export default App;
+```
+
+- Early return during loading — same technique as in EntryList.
+- Child components are passed the data they need via props: `onSubmit={handleSubmit}` for the form; `entries={entries}` for the chart and list.
+- `export default App;` — default export. `main.tsx` imports this as `import App from './App'`.
 
 > ⚠️ **Common Mistake: Async useEffect**
 > You might try: `useEffect(async () => { ... })`. This doesn't work — React expects useEffect to return either nothing or a cleanup function, not a Promise. Always define the async function inside the effect.
@@ -528,6 +1005,27 @@ It would work most of the time, but could cause a subtle bug. If `handleSubmit` 
 ## 7. Add Styles
 
 Replace `client/src/App.css` with styling for the app. Here's a dark-theme design:
+
+### How to Read This CSS (If You've Never Written CSS)
+
+You don't need to memorize the values — just understand the shape. Every CSS rule has three parts:
+
+```css
+.entry-form {          /* selector: which element(s) this targets */
+  background: #1e293b; /* property: value — one per line */
+  padding: 1.5rem;     /* more properties… */
+}
+```
+
+- **Selector** — the text before the `{`. `.entry-form` (with a dot) selects every element whose `className` includes `entry-form`. `#id` selects by id; `body` selects by tag name.
+- **Property: value** — the actual style. Ends with a semicolon.
+- **Units**: `rem` is relative to the document's base font size (usually 16px, so `1rem` = 16px). `px` is exact pixels. `%` is relative to the parent.
+- **Colors**: `#0f172a` is hex (six hex digits: two for red, two for green, two for blue). `#38bdf8` is a bright sky blue.
+- **Nested selectors**: `.form-field input` means "any `<input>` inside an element with class `form-field`."
+- **Pseudo-states**: `.submit-btn:hover` means "when the user's mouse is over a `.submit-btn`."
+
+If you've never written CSS before, the important idea is: your JSX assigns class names (`className="entry-form"`), and this file attaches visual rules to those names. Change a number here and you'll see the page change.
+
 
 <details>
 <summary>See the full CSS</summary>
