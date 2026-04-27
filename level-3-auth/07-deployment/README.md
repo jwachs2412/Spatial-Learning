@@ -114,6 +114,14 @@ Create `client/vercel.json`:
 }
 ```
 
+### Reading This Config
+
+`vercel.json` is a JSON file Vercel reads when deploying. Just one section here.
+
+- `"rewrites"` is an array of rules. Each rule maps an incoming URL pattern to an internal destination.
+- `"source": "/(.*)"` — a pattern that matches any URL. The `(.*)` is a regex group that captures everything after the leading `/`.
+- `"destination": "/index.html"` — for every match, internally serve `index.html` (the built React app). The browser's URL bar still shows the original URL — this is **server-side rewriting**, not redirecting.
+
 > **Why this is needed:** React Router handles navigation client-side. If a user goes directly to `https://yourapp.vercel.app/notes` (or refreshes on that page), Vercel tries to find a `/notes` file — which doesn't exist. The rewrite sends all paths to `index.html`, letting React Router handle routing.
 
 ---

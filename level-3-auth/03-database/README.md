@@ -51,6 +51,29 @@ CREATE TABLE notes (
 
 </details>
 
+### Reading This Schema Line-by-Line
+
+You already learned the basic SQL DDL grammar in Level 2 (`CREATE TABLE`, `SERIAL PRIMARY KEY`, `VARCHAR(n)`, `NOT NULL`, `DEFAULT`, `REFERENCES ... ON DELETE CASCADE`). Level 3 adds one new constraint, plus two design choices worth dwelling on.
+
+#### The `users` Table
+
+- `id SERIAL PRIMARY KEY` — auto-incrementing integer ID. Same as Level 2.
+- `email VARCHAR(255) UNIQUE NOT NULL`
+  - `UNIQUE` is **new in this lesson**. It tells the database "no two rows in this table can share the same value in this column." If someone tries to register with an email already in `users`, PostgreSQL rejects the `INSERT` with a duplicate-key error.
+  - PostgreSQL automatically builds an index on a `UNIQUE` column, so login lookups by email are fast.
+  - 255 characters is the historical convention for email length — well above any realistic email.
+- `password_hash VARCHAR(255) NOT NULL` — a string column that will hold bcrypt's output. **Notice the name.** The column is called `password_hash`, not `password`. That's deliberate: every developer reading this code is reminded that the value is a hash, never a plaintext password.
+- `role VARCHAR(20) DEFAULT 'user'` — a small string for the user's role. New rows default to `'user'`; we'd manually `UPDATE` to `'admin'` for admin accounts.
+- `created_at TIMESTAMP DEFAULT NOW()` — automatic creation timestamp.
+
+#### The `notes` Table
+
+- `user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+  - Same foreign-key pattern you saw in Level 2's `tasks.project_id`.
+  - Every note must belong to a real user. If a user is deleted, all their notes are deleted too.
+- `title VARCHAR(200) NOT NULL` — note title.
+- `content TEXT DEFAULT ''` — the body. `TEXT` (no length limit) suits long content; default empty string means inserts can omit it.
+
 **Key design decisions:**
 
 | Column | Why This Design |
@@ -105,6 +128,8 @@ pool.query('SELECT NOW()')
 
 export default pool;
 ```
+
+This file is **identical** to Level 2 Step 3's `db/index.ts`. If any line is unfamiliar — `Pool`, `connectionString`, the promise chain `.then(...).catch(...)`, or `process.exit(1)` — see Level 2 Step 3's "Reading This File Line-by-Line" walkthrough.
 
 > ⚠️ **Type the error parameter**: `.catch((err: Error) => { ... })` — not `.catch((err) => { ... })`. Without the type, TypeScript errors with `Parameter 'err' implicitly has an 'any' type`.
 

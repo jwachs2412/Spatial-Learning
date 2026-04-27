@@ -1,5 +1,20 @@
 # Step 6 — Building the Frontend: Auth Pages, Routing, and Notes UI
 
+## What's New on the Frontend in Level 3
+
+JSX, hooks, controlled inputs, state management, and the generic `request<T>` helper all carry over from Level 1 and Level 2. If any of those feel unfamiliar, revisit Level 1 Step 4's React primer and Level 2 Step 5's `request<T>` walkthrough before continuing.
+
+The new building blocks unique to Level 3:
+
+- **`localStorage`** — a tiny key/value store the browser persists across page refreshes. `localStorage.setItem('token', value)` saves; `localStorage.getItem('token')` reads; `localStorage.removeItem('token')` clears. Strings only — for objects, JSON.stringify in / JSON.parse out.
+- **Bearer token header** — every authenticated API request includes `Authorization: Bearer <token>`. We build it once in a helper and spread it into every `fetch` call.
+- **React Context** — a way to share data across components without passing props through every level. Three pieces: `createContext(...)` to declare the shape, a `Provider` component that holds the state, and `useContext(...)` (or a custom hook) to read it.
+- **Custom hooks** — functions whose name starts with `use` that wrap a hook (or several) for reuse. `useAuth()` is one we'll write; calling it from any component gives us the auth state.
+- **React Router** — URL-based navigation. `<BrowserRouter>` (top-level), `<Routes>` and `<Route path="..." element={...}>` (declare paths), `<Link to="...">` (navigation links), `useNavigate()` (programmatic navigation), `<Navigate to="...">` (redirect during render).
+- **`ReactNode` type** — a TypeScript type for "anything React can render": JSX elements, strings, numbers, fragments, arrays of these. Used when you accept arbitrary children as a prop.
+
+Every code block below has a "Reading This File Line-by-Line" walkthrough using these.
+
 ## Spatial Orientation
 
 ```
@@ -122,6 +137,47 @@ export const deleteNote = (id: number) =>
 
 </details>
 
+### Reading This File Line-by-Line
+
+Most of this file is the same `request<T>` generic helper from Level 2. The new bits are the two helpers at the top and the spread of `authHeaders()` into every request.
+
+```typescript
+function getToken(): string | null {
+  return localStorage.getItem('token');
+}
+```
+
+- `localStorage` is a built-in browser global — an object with `setItem`, `getItem`, `removeItem` methods. Each value is a string.
+- `getItem('token')` returns the stored string, or `null` if no value was set.
+- The return type `string | null` documents that null is possible.
+
+```typescript
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+```
+
+- `Record<string, string>` is a TypeScript utility type meaning "an object with string keys and string values."
+- Read the body as: "if we have a token, return an object with one header; otherwise return an empty object."
+- The empty-object case is important — calling `fetch` with `headers: { ..., undefined }` would crash. By returning `{}` and spreading it, we contribute nothing to the headers.
+
+```typescript
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}${url}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+      ...options?.headers,
+    },
+  });
+```
+
+- Same generic helper from Level 2, with one addition: `...authHeaders()` is spread into the headers object.
+- Spread order matters: the default `Content-Type` is first, then `authHeaders()` (so an empty object overwrites nothing, or a token is added), then any caller-provided headers (which can override either if needed).
+- Result: every authenticated request automatically includes the JWT. No component or service function has to remember to attach it.
+
 ---
 
 ## 3. Auth Context
@@ -205,6 +261,137 @@ export function useAuth() {
 
 </details>
 
+### Reading This File Line-by-Line
+
+This is the densest new pattern in Level 3. We'll go in three chunks: **declare the context shape**, **build the provider**, **expose the custom hook**.
+
+#### Chunk 1: Declare the Shape
+
+```tsx
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User } from '../types';
+import * as api from '../services/api';
+
+interface AuthContextType {
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+```
+
+- `interface AuthContextType { ... }` describes everything we'll share through the context: state (user, token, isLoading) plus action functions (login, register, logout).
+- Each function's type is written `(args) => returnType`. So `login: (email: string, password: string) => Promise<void>` reads "a function taking two strings, returning a void promise."
+- `createContext<AuthContextType | null>(null)` creates a Context object. The `<...>` type argument says "values flowing through this context will be either AuthContextType or null." We initialize with `null` so consumers can detect "you forgot to wrap the app in an AuthProvider."
+
+#### Chunk 2: Build the Provider
+
+```tsx
+export function AuthProvider({ children }: { children: ReactNode }) {
+```
+
+- A component named `AuthProvider`. Its only prop is `children`, typed as `ReactNode` (anything renderable).
+- Whatever components you nest inside `<AuthProvider>...</AuthProvider>` will be able to read this context.
+
+```tsx
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [isLoading, setIsLoading] = useState(true);
+```
+
+Three state values:
+
+- `user` starts null and gets populated after we verify the token.
+- `token` is read from localStorage on first render. If the user has a saved token, we start with it; otherwise null. This is what "remember me across page refreshes" looks like in code.
+- `isLoading` is true until we either confirm or reject the saved token.
+
+```tsx
+  useEffect(() => {
+    if (token) {
+      api.getMe()
+        .then(setUser)
+        .catch(() => {
+          localStorage.removeItem('token');
+          setToken(null);
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
+  }, [token]);
+```
+
+- Effect with `[token]` as the dependency: runs once on mount, and again any time `token` changes.
+- If we have a token, call `api.getMe()` to verify it. The server will either return the user or 401.
+  - `.then(setUser)` — shorthand for `.then((user) => setUser(user))`. Because `setUser` is itself a one-arg function, we can pass it directly.
+  - `.catch(() => { ... })` — token rejected (expired, tampered, or revoked). Clear it from localStorage and from state.
+  - `.finally(() => setIsLoading(false))` — run regardless of success or failure. Loading is over.
+- If we don't have a token, just stop loading. Nothing to verify.
+
+```tsx
+  const login = async (email: string, password: string) => {
+    const response = await api.login(email, password);
+    localStorage.setItem('token', response.token);
+    setToken(response.token);
+    setUser(response.user);
+  };
+```
+
+- Three writes happen in order: persist to localStorage, update token state, update user state.
+- `localStorage.setItem(key, value)` saves the string under that key. Survives page refreshes and browser restarts (until cleared or until storage limits are hit).
+- Updating `token` triggers the `useEffect` above to re-run, but this time it has a verified user from the response, not a stale token from localStorage.
+
+```tsx
+  const register = async (email: string, password: string) => {
+    const response = await api.register(email, password);
+    localStorage.setItem('token', response.token);
+    setToken(response.token);
+    setUser(response.user);
+  };
+```
+
+Same pattern as login. Auto-login after registration.
+
+```tsx
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  };
+```
+
+The opposite: clear from storage, reset state.
+
+```tsx
+  return (
+    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+```
+
+- `<AuthContext.Provider value={...}>` is how React makes a context value available to descendants. Any component anywhere inside `{children}` can call `useContext(AuthContext)` and get back this object.
+- The `value={{...}}` packs all six things into one object. That object is what consumers receive.
+
+#### Chunk 3: The Custom Hook
+
+```tsx
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+}
+```
+
+- Wraps `useContext(AuthContext)` so consumers don't have to import the context object themselves.
+- The null check converts a confusing "context is null" runtime bug into a clear error message: "you forgot to wrap your app in `<AuthProvider>`."
+- This is the **custom hook** pattern. Any function whose name starts with `use` that calls other hooks counts as a hook. Component code calls `useAuth()` and gets back the typed object.
+
 ---
 
 ## 4. ProtectedRoute Component
@@ -225,11 +412,59 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 ```
 
+### Reading This File Line-by-Line
+
+A tiny but powerful component. It wraps any page that requires login.
+
+- `useAuth()` returns our context object. We destructure the `user` and `isLoading` fields.
+- `if (isLoading) return <div>Loading...</div>;` — while we're verifying the saved token, show a loading state. **Don't redirect during loading** — that would bounce a logged-in user to `/login` for a split-second on every refresh.
+- `if (!user) return <Navigate to="/login" />;` — `<Navigate>` is React Router's "redirect during render" component. Returning it from a render function tells the router to navigate.
+- `return <>{children}</>;` — passing the auth check, render whatever was wrapped. The `<>...</>` is a React fragment (no DOM wrapper).
+
+Usage at the routing level: `<Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />`. The `NotesPage` only mounts when authenticated.
+
 ---
 
 ## 5. Pages
 
 Build three pages: LoginPage, RegisterPage, and NotesPage. Each one uses `useAuth()` from the context.
+
+### Reading the Pages — Patterns to Notice
+
+The page components reuse familiar patterns (controlled inputs, async submit, try/catch/finally, `setIsSubmitting`). The new Level 3 pieces appear in two places — read these once and the rest is review.
+
+**`useNavigate()`** (from `react-router-dom`):
+
+```tsx
+const navigate = useNavigate();
+// ...
+await login(email, password);
+navigate('/notes');
+```
+
+- `useNavigate()` returns a function. Call it with a path to navigate programmatically. Used after a successful login to send the user to `/notes`.
+- This is the imperative cousin of `<Navigate to="...">`. Use `<Navigate>` inside JSX during render; use `navigate(...)` inside event handlers or effects.
+
+**`<Link to="...">`** (from `react-router-dom`):
+
+```tsx
+<Link to="/register">Register</Link>
+```
+
+- A drop-in replacement for `<a href="...">`. Looks the same, but doesn't trigger a full page reload when clicked — React Router intercepts and updates the URL without re-fetching from the server. Much faster.
+- Always use `<Link>` for in-app navigation. Use plain `<a>` only for external URLs.
+
+**`useAuth()` consumption**:
+
+```tsx
+const { login } = useAuth();      // LoginPage destructures just `login`
+const { register } = useAuth();   // RegisterPage destructures just `register`
+const { user, logout } = useAuth(); // NotesPage destructures user + logout
+```
+
+Each page pulls only what it needs. Because `useAuth()` returns the same object whether you destructure one field or six, it's both expressive and lightweight.
+
+Everything else in the pages — `useState` for form fields, `try/catch/finally` for the submit handler, `e.preventDefault()`, controlled inputs — is the exact same pattern from Level 1 Step 4 and Level 2 Step 5. Refer back to those walkthroughs if anything feels unfamiliar.
 
 <details>
 <summary>LoginPage</summary>
@@ -473,6 +708,45 @@ export default App;
 ```
 
 </details>
+
+### Reading This File Line-by-Line
+
+The whole app is wrapped in two providers and a routing block. Order matters.
+
+```tsx
+<BrowserRouter>
+  <AuthProvider>
+    <Routes>
+      ...
+    </Routes>
+  </AuthProvider>
+</BrowserRouter>
+```
+
+- `<BrowserRouter>` (outermost) gives the rest of the tree access to React Router's hooks and components. It listens to URL changes.
+- `<AuthProvider>` wraps inside the router so any component (including pages) can call `useAuth()`. Everything inside has access to the auth context.
+- `<Routes>` is the routing container. Inside, each `<Route>` declares one URL pattern.
+
+```tsx
+<Route path="/login" element={<LoginPage />} />
+```
+
+- `path` is the URL pattern (`/login`).
+- `element` is the JSX to render when this URL matches. Note: it's an actual element (`<LoginPage />`), not a component reference. This is React Router v6 syntax.
+
+```tsx
+<Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
+```
+
+- `<ProtectedRoute>` wraps `<NotesPage />`. As we saw, ProtectedRoute either renders its children (if authenticated) or redirects to `/login`.
+- The wrapper-around-children pattern is how you "decorate" a route with extra logic — you can stack multiple wrappers (auth, role check, layout) by nesting them.
+
+```tsx
+<Route path="*" element={<Navigate to="/notes" />} />
+```
+
+- `path="*"` is the **wildcard** — matches any URL no other route matched.
+- `<Navigate to="/notes" />` redirects there. So an unknown URL like `/foo` sends the user to `/notes`. Combined with ProtectedRoute, that means an unauthenticated user typing any URL ends up at `/login`.
 
 ---
 

@@ -113,6 +113,18 @@ eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjEsInJvbGUiOiJ1c2VyIn0.abc123signature
   {"alg":"HS256"}    {"userId":1,"role":"user"}    HMAC(header+payload, SECRET)
 ```
 
+### Reading a JWT Character-by-Character
+
+A JWT is one string with no spaces. The structure looks intimidating until you know what each part is.
+
+- The `.` (period) characters are **separators**. There are exactly two of them, dividing the string into three sections: header, payload, signature.
+- Each section is **Base64-encoded** — a way to express any data using only letters, numbers, hyphens, and underscores. This makes the token safe to put in URLs, headers, and cookies.
+- **Base64 is not encryption.** Anyone can decode the header and payload to see their contents. Try copying a real JWT and pasting it at [jwt.io](https://jwt.io) — you'll see the original JSON. (Don't paste production tokens into web tools.)
+- The **header** decodes to JSON like `{"alg":"HS256","typ":"JWT"}` — algorithm name and type.
+- The **payload** decodes to JSON like `{"userId":1,"role":"user","iat":1735689600,"exp":1736294400}` — the data the server stamped in. `iat` = issued-at timestamp; `exp` = expiration timestamp.
+- The **signature** is the result of running `header.payload` through HMAC-SHA256 keyed by your `JWT_SECRET`. It's the only piece that requires the secret to produce.
+- **Why this is secure:** an attacker can edit the payload to claim `userId: 999` and re-encode it. But to make the new payload's signature match, they'd need the `JWT_SECRET` — which only lives on your server. When the server verifies the tampered token, the signature check fails and the request is rejected.
+
 The three parts are separated by dots and are base64-encoded (not encrypted — anyone can decode them). The security comes from the **signature**: if anyone changes the payload (e.g., changing `userId` from 1 to 2), the signature won't match, and the server rejects the token.
 
 ### Token Lifecycle

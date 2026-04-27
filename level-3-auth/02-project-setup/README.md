@@ -1,5 +1,7 @@
 # Step 2 — Project Setup: Scaffolding with Authentication
 
+> **The terminal, npm, git, and TypeScript-config pieces are identical to Level 1 Step 2 and Level 2 Step 2.** Refer to those lessons if any command (`mkdir`, `cd`, `git init`, `npm install`, `tsconfig.json` options) feels unfamiliar. This lesson only unpacks the **new** Level 3 things: `react-router-dom`, `bcryptjs`, `jsonwebtoken`, and the `JWT_SECRET` env var.
+
 ## Spatial Orientation
 
 ```
@@ -46,6 +48,12 @@ npm install
 cd ..
 ```
 
+**Reading these commands:**
+
+- The first three lines are the same Vite scaffold from Level 1 — no change.
+- `npm install react-router-dom` is the only new step. It downloads the `react-router-dom` package (a routing library for React) and adds it to `client/package.json`. We need this because Level 3 introduces multiple URLs: `/login`, `/register`, `/notes`. Earlier levels switched views by flipping a state variable; this level uses the browser's real URL.
+- `npm install` (with no package name) re-reads the whole `package.json` and installs anything it doesn't already have. Running it after the targeted install is just belt-and-suspenders — usually optional.
+
 > **Key Concept: React Router**
 > Until now, our apps were single-page with view switching via state. React Router adds real URL-based navigation: `/login`, `/register`, `/notes`. The browser's address bar changes, back/forward buttons work, and users can bookmark pages.
 
@@ -68,6 +76,15 @@ npm install express cors pg dotenv bcryptjs jsonwebtoken
 # TypeScript and dev tools
 npm install typescript ts-node nodemon
 ```
+
+**The two new packages — what they actually do:**
+
+- **`bcryptjs`** — a password hashing library. Exposes two functions you'll use in the auth route:
+  - `bcrypt.hash(password, costFactor)` — turn a plain-text password into a long random-looking string. One-way: you can't reverse it back to the password.
+  - `bcrypt.compare(password, hash)` — given a plaintext attempt and a stored hash, return `true` if they match. Internally bcrypt re-hashes the attempt and compares — it never decrypts.
+- **`jsonwebtoken`** — a JWT library. Two main functions:
+  - `jwt.sign(payload, secret, options)` — wrap your payload (e.g. `{ userId: 5, role: 'user' }`) into a signed token string.
+  - `jwt.verify(token, secret)` — verify the signature and return the original payload. Throws if the token is malformed, has been tampered with, or has expired.
 
 | Package | What It Does | New in Level 3? |
 |---------|-------------|-----------------|
@@ -196,6 +213,14 @@ JWT_EXPIRES_IN=7d
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+
+**Reading this one-liner:**
+
+- `node` is the Node.js runtime. Normally you give it a file: `node script.js`. With `-e` (eval) you give it a string of JavaScript to execute directly.
+- `require('crypto')` loads Node's built-in cryptography module. (`require` is the older module syntax; in our project files we use `import`. They both work.)
+- `.randomBytes(32)` generates 32 cryptographically-strong random bytes — 256 bits of entropy.
+- `.toString('hex')` formats those bytes as a 64-character hexadecimal string.
+- `console.log(...)` prints the result to the terminal. Copy that string into your production `JWT_SECRET` env var. Never reuse a secret across projects.
 
 ---
 
