@@ -2,6 +2,21 @@
 
 # 04 — Backend: Feature Modules
 
+## What's New You'll Meet in This Lesson
+
+Authentication, validation, parameterized queries, the dynamic-update builder, error middleware — all carried from Levels 3 and 4. The genuinely new shapes:
+
+- **Module split: `*.routes.ts` + `*.service.ts`** — each feature is two files. Routes parse HTTP and call services; services do the SQL and business logic. The module folder bundles them.
+- **Module augmentation** — `declare global { namespace Express { interface Request { user?: JWTPayload } } }` extends Express's built-in `Request` type so `req.user` is recognized everywhere. Replaces Level 3's separate `AuthRequest` interface.
+- **`Object.assign(new Error('msg'), { status: 404 })`** — attaches a custom `status` property to an Error. Routes read `err.status` to pick the HTTP status. Lets services throw richly-tagged errors without the routes knowing the SQL details.
+- **Database transactions** — `pool.connect()` returns a single client. `client.query('BEGIN')` opens a transaction; `'COMMIT'` saves all changes; `'ROLLBACK'` undoes them. Used when one logical operation needs multiple SQL statements that must all succeed or all fail.
+- **PostgreSQL JSON aggregation** — `json_agg(json_build_object(...))` builds nested JSON inside the database. Returns "boards with their lists with their cards" in one query instead of N+1 round trips.
+- **`COALESCE(... , '[]')` and `FILTER (WHERE ...)`** — handle the edge case where a `LEFT JOIN` produces no matches. `FILTER` excludes nulls from the aggregation; `COALESCE` substitutes an empty array string when nothing matched.
+- **Postgres error codes** — `err.code === '23505'` is the unique-constraint violation. Catching specific codes lets you turn database errors into specific user-facing messages.
+- **Position management with `COALESCE(MAX(position), -1) + 1`** — compute the next position by reading the current max and adding 1. The `COALESCE` handles "first row" (no rows yet, MAX is null) gracefully.
+
+Every code block below has a "Reading This File Line-by-Line" walkthrough that uses these ideas.
+
 ## Spatial Orientation
 
 The backend is organized as **feature modules**. Each module owns its routes and service layer. The server entry point mounts modules like building blocks.
@@ -124,6 +139,23 @@ declare global {
   }
 }
 
+// --- Reading the `declare global` block ---
+//
+// This is **module augmentation**: a TypeScript-only feature that adds fields
+// to a type defined in another module. We're saying "Express's `Request`
+// type now also has an optional `user` field."
+//
+// - `declare global { ... }` — switches into the global type scope.
+// - `namespace Express { ... }` — Express's own types live in this namespace.
+// - `interface Request { user?: JWTPayload; }` — TypeScript MERGES this with
+//   the existing `Request` interface. Our field is added; Express's other
+//   fields stay intact.
+//
+// Once this runs, every `req: Request` parameter in the codebase has access
+// to `req.user`. No need for the `AuthRequest` workaround from Level 3.
+// `?` makes it optional — middleware sets it; routes that follow `authenticate`
+// can read it (with `req.user!.userId` since we know it's set).
+
 export function authenticate(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
@@ -162,6 +194,16 @@ function toSafeUser(user: User): SafeUser {
   return safe;
 }
 
+// --- Reading toSafeUser ---
+//
+// `const { password_hash, ...safe } = user;` is **destructuring with rest**.
+//   - `password_hash` — pull this field out into its own variable.
+//   - `...safe` — collect every OTHER field into a new object named `safe`.
+// So `safe` is a copy of the user object MINUS `password_hash`. We return it
+// directly. This is one of the cleanest ways to drop a sensitive field from
+// an object: the rest pattern handles all the other fields automatically,
+// even if you add new ones later.
+
 function createToken(user: User): string {
   const payload: JWTPayload = { userId: user.id, email: user.email };
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -178,6 +220,21 @@ export async function register(
   if (existing.rows.length > 0) {
     throw Object.assign(new Error('Email already registered'), { status: 409 });
   }
+
+  // --- Reading the throw line ---
+  //
+  // `new Error('Email already registered')` creates a standard Error object
+  // with a `.message` property.
+  //
+  // `Object.assign(target, source)` mutates `target` by copying source's
+  // fields onto it, then returns `target`. So
+  //   Object.assign(new Error('msg'), { status: 409 })
+  // gives us an Error with both a normal `.message` AND a custom `.status`.
+  //
+  // The route handler reads `err.status` to set the HTTP status:
+  //   if (err.status) res.status(err.status);
+  // This is how services (which know "what went wrong") communicate with
+  // routes (which know "how to respond") without coupling them tightly.
 
   const passwordHash = await bcrypt.hash(password, 10);
   const result = await pool.query(
@@ -352,6 +409,27 @@ export async function createBoard(
   }
 }
 
+// --- Reading the createBoard transaction ---
+//
+// Creating a board needs TWO inserts: the board itself, and a board_members
+// row marking the creator as owner. Both must succeed or both must fail —
+// otherwise we end up with a board no one can access.
+//
+// - `pool.connect()` checks out a single client from the pool. Until we
+//   release it, this client is reserved for our use. Transactions need to
+//   run on a single client because BEGIN/COMMIT only apply to that client's
+//   connection.
+// - `BEGIN` opens a transaction. Subsequent queries run inside it.
+// - The two `INSERT`s happen with `client.query(...)`, not `pool.query(...)`,
+//   so they share the same connection and the same transaction.
+// - `COMMIT` makes both inserts permanent.
+// - `ROLLBACK` (in the catch) undoes everything if anything threw. The
+//   database state goes back to before BEGIN.
+// - `finally { client.release(); }` — return the client to the pool no
+//   matter what. **Forgetting `release()` leaks connections** and eventually
+//   exhausts the pool. The `finally` block runs whether we committed,
+//   rolled back, or threw before reaching either.
+
 // Get a board with all its lists and cards
 export async function getBoardWithLists(
   boardId: number,
@@ -402,6 +480,46 @@ export async function getBoardWithLists(
      ORDER BY l.position`,
     [boardId]
   );
+
+  // --- Reading this query layer by layer ---
+  //
+  // **The shape we want**: one row per list, each row having a `cards` field
+  // that is a JSON array of card objects (with the assignee nested inside
+  // each card). PostgreSQL builds this nesting for us using JSON functions.
+  //
+  // **The base joins** (read these first):
+  //   FROM lists l
+  //   LEFT JOIN cards c ON l.id = c.list_id
+  //   LEFT JOIN users u ON c.assignee_id = u.id
+  //   WHERE l.board_id = $1
+  // This gives one row per (list, card, assignee) triple. A list with 3
+  // cards produces 3 rows. LEFT JOIN keeps lists with zero cards (cards
+  // columns are NULL).
+  //
+  // **GROUP BY l.id** — collapses those rows back into one row per list.
+  //
+  // **`json_build_object('key', value, ...)`** — builds a JSON object from
+  // alternating keys and values. Equivalent to `{ id: c.id, title: c.title, ... }`.
+  //
+  // **`json_agg(...)`** — aggregates one card-object per row into a JSON
+  // array. With GROUP BY, you get one array per list.
+  //
+  // **`ORDER BY c.position` inside json_agg** — sorts cards by position
+  // within each list's array.
+  //
+  // **`FILTER (WHERE c.id IS NOT NULL)`** — excludes the NULL-card rows
+  // produced by LEFT JOINs against lists with zero cards. Without this,
+  // an empty list's `cards` field would be `[null]` instead of `[]`.
+  //
+  // **`COALESCE(json_agg(...), '[]')`** — fallback when json_agg returns
+  // null (which happens if FILTER removes everything). We substitute the
+  // string `'[]'`. The `pg` driver parses it as an empty JSON array.
+  //
+  // **`CASE WHEN u.id IS NOT NULL THEN ... ELSE NULL END`** — for cards
+  // with no assignee, return null instead of an object full of NULLs.
+  //
+  // The whole query returns one round trip what would otherwise need
+  // dozens (1 for lists + 1 per list for cards + 1 per card for assignees).
 
   return {
     ...board,
@@ -476,6 +594,27 @@ export async function addMember(
     throw err;
   }
 }
+
+// --- Reading the catch block ---
+//
+// Recall the schema: `UNIQUE(board_id, user_id)` prevents duplicate
+// memberships. If the user is already a member, the `INSERT` fails with
+// a Postgres error.
+//
+// **Postgres error codes** are 5-character SQL standard codes:
+//   - `23505` = unique_violation (this case)
+//   - `23503` = foreign_key_violation (referenced row doesn't exist)
+//   - `23502` = not_null_violation (a NOT NULL column got null)
+// The pg driver attaches the code to the error as `err.code`.
+//
+// We catch the specific code and turn it into a user-friendly 409 Conflict.
+// For any OTHER error (network blip, syntax error, etc.), we rethrow with
+// `throw err;` so the global error handler logs and returns a 500. We don't
+// hide unexpected errors — only the one we anticipated.
+//
+// `err: any` — TypeScript convention for untyped errors (Node doesn't ship
+// types for the pg-specific error fields). The `any` here is a tradeoff:
+// we trade strict typing for the ability to read `err.code`.
 
 // Get board members
 export async function getMembers(boardId: number, userId: number) {
@@ -662,6 +801,23 @@ export async function createList(boardId: number, userId: number, name: string):
   );
   const position = posResult.rows[0].next_pos;
 
+  // --- Reading the position math ---
+  //
+  // We want the new list to appear at the END of the board. So `position`
+  // = (current highest position) + 1.
+  //
+  // - `MAX(position)` returns the highest existing position.
+  // - When the table has zero matching rows, `MAX(...)` returns NULL.
+  // - `COALESCE(value, fallback)` returns `value` unless it's null, in
+  //   which case it returns `fallback`.
+  //
+  // So `COALESCE(MAX(position), -1) + 1`:
+  //   - If there are existing lists with max position 3 → `3 + 1 = 4`.
+  //   - If there are no lists yet → `-1 + 1 = 0`. (Positions start at 0.)
+  //
+  // The `-1` fallback is a clever way to make the first list land at 0
+  // without needing a separate "is the table empty?" check.
+
   const result = await pool.query(
     'INSERT INTO lists (board_id, name, position) VALUES ($1, $2, $3) RETURNING *',
     [boardId, name, position]
@@ -677,6 +833,27 @@ export async function updateList(listId: number, userId: number, name: string): 
      WHERE l.id = $1 AND bm.user_id = $2`,
     [listId, userId]
   );
+
+  // --- Reading the authorization-chain JOIN ---
+  //
+  // We don't have a direct `user_id` on the lists table. To check whether
+  // user X can edit list Y, we walk the chain:
+  //   list → its board → that board's members → does user X appear?
+  //
+  // The JOIN handles all three steps in one query:
+  //   - `FROM lists l` — start with the list.
+  //   - `JOIN board_members bm ON l.board_id = bm.board_id` — connect each
+  //     list row to all member rows for the same board.
+  //   - `WHERE l.id = $1 AND bm.user_id = $2` — narrow to: this specific
+  //     list AND a row where the user matches.
+  //
+  // If the join produces any row, the user is authorized. Empty result =
+  // either the list doesn't exist or the user isn't a member. We return
+  // 404 in either case (same trick as Level 3's row-level security: don't
+  // tell attackers whether a resource exists).
+  //
+  // The cards and comments services use the same pattern with a longer
+  // chain: `card → list → board → board_members`.
   if (check.rows.length === 0) {
     throw Object.assign(new Error('List not found'), { status: 404 });
   }
@@ -927,6 +1104,38 @@ export async function moveCard(
     client.release();
   }
 }
+
+// --- Reading moveCard's three updates ---
+//
+// Moving a card from one position to another requires shifting the
+// surrounding cards' positions. Imagine cards currently at positions 0, 1,
+// 2, 3, 4 in list A, and we move the card at position 2 into list B at
+// position 0:
+//
+//   STEP 1 — Close the gap left behind in source list A:
+//     UPDATE cards SET position = position - 1
+//     WHERE list_id = A AND position > 2
+//   This shifts positions 3, 4 → 2, 3. Cards 0, 1 stay put.
+//
+//   STEP 2 — Make room in target list B at position 0:
+//     UPDATE cards SET position = position + 1
+//     WHERE list_id = B AND position >= 0
+//   This shifts every card in B up by one. (`>=` so the existing card at
+//   position 0 also moves out of the way.)
+//
+//   STEP 3 — Move the card itself:
+//     UPDATE cards SET list_id = B, position = 0 WHERE id = ?
+//   Now the card lives at B/0.
+//
+// **Why a transaction?** If step 2 failed after step 1 succeeded, list A
+// would have a closed gap but the card would still be there, leaving
+// duplicate positions. The transaction guarantees: either all three updates
+// take effect, or none of them do.
+//
+// **`position - 1` and `position + 1` in SQL** — these expressions read
+// each row's current position and write back the new value. PostgreSQL
+// computes per-row, so this isn't just "set every row to the same number."
+// You can do arithmetic with column values inside `SET`.
 
 export async function deleteCard(cardId: number, userId: number): Promise<void> {
   const check = await pool.query(
@@ -1192,6 +1401,23 @@ if (process.env.NODE_ENV !== 'test') {
 
 export default app;
 ```
+
+### Reading the Module-Mount Pattern
+
+```typescript
+app.use('/api/auth', authRoutes);       // Auth router internally uses /register, /login, /me
+app.use('/api', boardsRoutes);          // Boards router internally uses /boards, /boards/:id, /boards/:id/members
+app.use('/api', listsRoutes);           // Lists router internally uses /boards/:boardId/lists, /lists/:id
+app.use('/api', cardsRoutes);           // Cards router internally uses /lists/:listId/cards, /cards/:id, /cards/:id/move
+app.use('/api', commentsRoutes);        // Comments router internally uses /cards/:cardId/comments, /comments/:id
+```
+
+Two mounting strategies in play:
+
+- `/api/auth` mounts the auth router under a fixed prefix. Inside `authRoutes`, paths are written as `/register`, `/login`, `/me` — they end up at `/api/auth/register`, etc.
+- `/api` (no further prefix) is used for the other four routers because their endpoints **span multiple resource shapes**. The boards router has both `/boards` and `/boards/:id/members`; the lists router has both `/boards/:boardId/lists` (nested under board) and `/lists/:id` (top-level by ID). Mounting at `/api` lets each router declare its full path internally.
+
+**Order matters.** Multiple routers can match overlapping paths; Express tries them in registration order. Here the routers' specific paths don't conflict, but watch out when designing your own.
 
 Notice how clean the entry point is — each module is mounted with one line. The modules handle their own route prefixes internally.
 

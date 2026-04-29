@@ -2,6 +2,22 @@
 
 # 07 — CI/CD & Monitoring: GitHub Actions and Sentry
 
+## What's New You'll Meet in This Lesson
+
+This lesson introduces **YAML** (a config-file format) and a few patterns specific to GitHub Actions and Sentry:
+
+- **YAML** — a markup language designed for human-friendly config files. **Indentation is significant** (like Python). Lists use `- item`. Key-value pairs use `key: value`. There are no curly braces or commas — structure comes from indentation alone. The `.yml` and `.yaml` extensions are interchangeable.
+- **GitHub Actions workflow file** — `.github/workflows/*.yml`. GitHub watches this directory and runs the file's instructions when triggered.
+- **`uses: action-name@version`** — an Actions-specific keyword for "use this prebuilt action." `actions/checkout@v4` clones the repo; `actions/setup-node@v4` installs Node.
+- **Service containers** — `services:` block that spins up Docker containers (like Postgres) alongside the test environment. Lets your tests hit a real database in CI.
+- **`${{ env.DATABASE_URL }}`** — Actions' template syntax for substituting variables into the YAML at runtime.
+- **`Sentry.init(config)`** — the React SDK's setup function. Configures DSN, environment, and integrations. Call once in `main.tsx`.
+- **`Sentry.ErrorBoundary`** — a drop-in error boundary that ALSO reports to Sentry. Replaces the hand-rolled class component from Level 4 when you want telemetry.
+- **`Sentry.setUser({...})`** — attaches user identity to subsequent error reports. Lets you filter Sentry by user.
+- **`useRef<HTMLButtonElement>(null)`** — React's hook for getting a stable reference to a DOM element. Used in focus management.
+
+Every code block below has a "Reading This Line-by-Line" walkthrough.
+
 ## Spatial Orientation
 
 Until now, deployment was trust-based: you pushed code and hoped it worked. Level 5 adds two safety nets: **CI/CD** catches bugs before they reach production, and **error monitoring** catches bugs that slip through.
@@ -153,22 +169,109 @@ jobs:
         working-directory: server
 ```
 
-### Line-by-Line Breakdown
+### Reading This YAML Line-by-Line
 
-| Section | Purpose |
-|---------|---------|
-| `name: CI` | Name shown in the GitHub Actions UI |
-| `on: push/pull_request` | Triggers on pushes to main and PRs targeting main |
-| `jobs` | Independent tasks that run in parallel |
-| `runs-on: ubuntu-latest` | Uses a fresh Ubuntu VM for each job |
-| `services: postgres` | Starts a PostgreSQL container alongside the VM |
-| `health-cmd pg_isready` | Waits until PostgreSQL is ready before running steps |
-| `ports: 5432:5432` | Maps container port to VM port |
-| `env: DATABASE_URL` | Environment variables available to all steps |
-| `uses: actions/checkout@v4` | Clones your repository into the VM |
-| `uses: actions/setup-node@v4` | Installs Node.js with npm caching |
-| `npm ci` | Clean install (faster than `npm install`, uses lockfile exactly) |
-| `working-directory` | Runs the command in the specified subdirectory |
+YAML reads top-down with **indentation defining structure**. Each indent level means "this belongs to the parent above." Two-space indentation is the convention.
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+```
+
+- `name: CI` — top-level field. The string `'CI'` shows up in the GitHub Actions UI.
+- `on:` — declares triggers. The two indented children (`push` and `pull_request`) are different events.
+  - `push: branches: [main]` — runs the workflow when commits are pushed to main.
+  - `pull_request: branches: [main]` — also runs on PRs targeting main.
+- `[main]` is YAML shorthand for an array `["main"]`. Could be expanded as `branches:\n  - main` if you have multiple.
+
+```yaml
+jobs:
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+```
+
+- `jobs:` — declares the parallel jobs. Each indented key (`test-frontend`, `test-backend`) is a job ID.
+- `runs-on: ubuntu-latest` — GitHub spins up a fresh Ubuntu virtual machine to execute this job.
+- `steps:` — an array of steps. Each `- name: ...` is one step.
+- `uses: actions/checkout@v4` — instead of writing shell commands, this step "uses" a prebuilt **Action**. `actions/checkout@v4` is GitHub's official action for cloning the repo. The `@v4` pins to a specific major version.
+
+```yaml
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+```
+
+- `with:` — pass parameters to the action. The action's docs define what keys are valid.
+- `node-version: 20` — install Node.js 20.
+- `cache: 'npm'` — turn on npm dependency caching to speed up subsequent runs.
+- `cache-dependency-path: client/package-lock.json` — fingerprint the cache by this lockfile so it's invalidated when dependencies change.
+
+```yaml
+      - name: Install dependencies
+        run: npm ci
+        working-directory: client
+```
+
+- `run: npm ci` — execute a shell command. `npm ci` is "clean install": deletes `node_modules` and installs exactly what `package-lock.json` specifies. Faster and more deterministic than `npm install`.
+- `working-directory: client` — run the command from inside `client/`.
+
+```yaml
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: collabboard_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+```
+
+The `services:` block on the backend job. Each service starts a Docker container.
+
+- `image: postgres:15` — pull the official PostgreSQL 15 Docker image.
+- `env:` — environment variables passed into the container (Postgres reads `POSTGRES_USER`, etc., on startup).
+- `options: >- ...` — `>-` is YAML's **folded scalar** syntax: the multiline string folds into a single line at runtime. Becomes one long `--health-cmd ...` argument.
+- `--health-cmd pg_isready --health-interval 10s ...` — Docker health-check options. GitHub Actions waits until the container reports healthy before running steps. Without this, the test could try to connect before Postgres is ready.
+- `ports: - 5432:5432` — expose the container's port 5432 (Postgres's default) on the VM. Tests connect to `localhost:5432` and reach the container.
+
+```yaml
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/collabboard_test
+      JWT_SECRET: test-secret-for-ci
+      JWT_EXPIRES_IN: 7d
+      NODE_ENV: test
+```
+
+Job-level environment variables. Available to every step. The `DATABASE_URL` here uses the credentials from the service container.
+
+```yaml
+      - name: Seed test data
+        run: npx tsx src/db/seed.ts
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+```
+
+`${{ env.DATABASE_URL }}` is **Actions template syntax** — read the env var and inject its value here. Looks redundant (we already declared `env: DATABASE_URL` at the job level) but the explicit pass-through is sometimes needed for sub-shells. The double curly braces `{{ }}` distinguish Actions templates from raw text.
 
 > [!NOTE]
 > **Technical:** `npm ci` is like `npm install` but stricter — it deletes `node_modules` first and installs exactly what's in `package-lock.json`. This ensures CI uses the same dependency versions as development. `npm install` might update the lockfile.
@@ -277,6 +380,27 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 ```
 
+### Reading the Sentry init Line-by-Line
+
+```typescript
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  environment: import.meta.env.MODE,
+  enabled: import.meta.env.PROD,
+  integrations: [
+    Sentry.browserTracingIntegration(),
+  ],
+  tracesSampleRate: 0.1,
+});
+```
+
+- `Sentry.init({...})` — the SDK setup call. Run it once, before any other code that might throw.
+- `dsn: import.meta.env.VITE_SENTRY_DSN` — read the DSN from your env vars. `VITE_*` env vars are exposed to client code by Vite at build time.
+- `environment: import.meta.env.MODE` — Vite sets this to `'development'` or `'production'` automatically. Sentry tags every error with this value so you can filter dev errors out of your production dashboard.
+- `enabled: import.meta.env.PROD` — `import.meta.env.PROD` is `true` only in production builds. If `enabled` is false, Sentry's init runs but no errors are sent. Means you don't need separate dev DSNs.
+- `integrations: [Sentry.browserTracingIntegration()]` — opt into performance monitoring. The browser-tracing integration measures page-load times, route changes, and slow API calls.
+- `tracesSampleRate: 0.1` — sample 10% of page loads for performance traces. Sending 100% would generate too much data and exceed Sentry's free-tier quota; 10% gives a representative picture.
+
 | Option | Value | Purpose |
 |--------|-------|---------|
 | `dsn` | Your Sentry DSN | Where to send error reports |
@@ -370,6 +494,13 @@ function Modal({ isOpen, onClose, children }) {
   // ... modal JSX with ref={closeButtonRef} on close button
 }
 ```
+
+### Reading the focus-management snippet
+
+- **`useRef<HTMLButtonElement>(null)`** — React's hook for getting a stable reference to a DOM element. The generic `<HTMLButtonElement>` types it (button-specific element). Initial value `null` because the element doesn't exist until React renders.
+- **`closeButtonRef.current?.focus()`** — `.current` is the actual DOM node (or `null` if not yet rendered). `?.focus()` uses optional chaining so we don't crash before render. `.focus()` is a built-in DOM method that moves keyboard focus to the element.
+- **The effect's dependency `[isOpen]`** — runs on mount AND whenever `isOpen` flips. So opening the modal moves focus into it; closing has no effect (focus naturally returns to the previously-focused element).
+- The JSX would attach this ref via `ref={closeButtonRef}`. Once mounted, `closeButtonRef.current` becomes the actual button.
 
 ### Keyboard Navigation
 

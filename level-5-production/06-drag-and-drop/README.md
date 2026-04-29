@@ -2,6 +2,23 @@
 
 # 06 — Drag & Drop: dnd-kit with Optimistic Updates
 
+## What's New You'll Meet in This Lesson
+
+Drag-and-drop is its own small world. You'll meet these dnd-kit shapes:
+
+- **`<DndContext>`** — top-level wrapper that sets up the drag system. Receives `sensors`, `onDragStart`, `onDragEnd`, etc.
+- **`<SortableContext>`** — wraps a list of sortable items. Receives an array of item IDs and a sorting strategy.
+- **`useSortable({ id, data })`** — hook that turns a component into a draggable + droppable item. Returns `setNodeRef`, `attributes`, `listeners`, `transform`, `transition`, `isDragging`. Spread `attributes` and `listeners` onto the element.
+- **`useDroppable({ id, data })`** — hook that turns a container into a drop target. Returns `setNodeRef` and `isOver`.
+- **`<DragOverlay>`** — renders a floating preview of the active item via a React portal so it can escape `overflow: hidden` and stacking contexts.
+- **Sensors**: `PointerSensor`, `KeyboardSensor`. Created with `useSensor(SensorClass, options)` and combined with `useSensors(...)`. Activation constraints (`distance: 5`) prevent accidental drags.
+- **Collision detection**: `closestCorners`, `closestCenter`, `rectIntersection`. Algorithms that decide which drop target wins when there's overlap.
+- **`CSS.Transform.toString(transform)`** — converts dnd-kit's transform object into a CSS string.
+- **`active.data.current` and `over.data.current`** — read the `data` you attached when calling `useSortable`/`useDroppable`. The drag event hands them back.
+- **Deep clone via `JSON.parse(JSON.stringify(obj))`** — quick way to snapshot state before optimistic updates so you can revert if the API fails.
+
+Every code block below has a "Reading This File Line-by-Line" walkthrough.
+
 ## Spatial Orientation
 
 This is the interaction that makes CollabBoard feel like a real product. Users drag cards between lists — "To Do" to "In Progress" — and the UI updates **instantly**. The backend confirms the move in the background. If it fails, the card snaps back.
@@ -148,16 +165,67 @@ export default function SortableCard({ card, onCardClick }: SortableCardProps) {
 }
 ```
 
-**What each hook return does:**
+### Reading SortableCard Line-by-Line
 
-| Return Value | Purpose |
-|-------------|---------|
-| `setNodeRef` | Attaches to the DOM element so dnd-kit can track its position |
-| `attributes` | ARIA attributes for accessibility (`role`, `tabIndex`, etc.) |
-| `listeners` | Event handlers for drag initiation (pointer down, keyboard) |
-| `transform` | The x/y offset while dragging — applied as CSS transform |
-| `transition` | CSS transition string for smooth animations |
-| `isDragging` | Boolean — true while this item is being dragged |
+```typescript
+const {
+  attributes,
+  listeners,
+  setNodeRef,
+  transform,
+  transition,
+  isDragging,
+} = useSortable({
+  id: card.id,
+  data: {
+    type: 'card',
+    card,
+  },
+});
+```
+
+- `useSortable({ id, data })` — the central dnd-kit hook for sortable items.
+  - `id` must be unique within its `SortableContext`. We use the card's primary key.
+  - `data` is arbitrary metadata you attach. dnd-kit hands it back to you in the drag event via `active.data.current`. We tag this as a `'card'` and include the card object so the BoardView's drag handler knows what was dragged.
+- The hook returns six values. We destructure them all:
+  - **`setNodeRef`** — a ref-setter function. Pass it to the wrapper `<div>` so dnd-kit can measure where the element is on screen.
+  - **`attributes`** — accessibility props (`role="button"`, `tabIndex={0}`, etc.). Spread them onto the wrapper.
+  - **`listeners`** — event handlers for pointer-down, keyboard activation, etc. Spread them onto the wrapper. Without `listeners`, the user can't initiate a drag.
+  - **`transform`** — an object like `{ x: 12, y: 45, scaleX: 1, scaleY: 1 }` representing the drag offset. Translates pointer movement into pixel offsets.
+  - **`transition`** — a CSS transition string for smooth animations when reordering.
+  - **`isDragging`** — boolean. True while the user is actively dragging this card.
+
+```typescript
+const style: React.CSSProperties = {
+  transform: CSS.Transform.toString(transform),
+  transition,
+  opacity: isDragging ? 0.4 : 1,
+};
+```
+
+Build the inline style using these values:
+
+- `CSS.Transform.toString(transform)` — converts the transform object into a CSS string like `'translate3d(12px, 45px, 0)'`. (We imported `CSS` from `@dnd-kit/utilities`.)
+- `transition` — copy the transition string from the hook directly.
+- `opacity: isDragging ? 0.4 : 1` — fade the original element while dragging so the user sees only the floating overlay copy.
+
+```typescript
+<div
+  ref={setNodeRef}
+  style={style}
+  className={`sortable-card ${isDragging ? 'card-item--dragging' : ''}`}
+  {...attributes}
+  {...listeners}
+  aria-roledescription="draggable card"
+>
+  <CardItem card={card} onClick={() => onCardClick(card)} />
+</div>
+```
+
+- `ref={setNodeRef}` — gives dnd-kit a handle on this DOM node.
+- `{...attributes} {...listeners}` — spread both sets of props onto the wrapper. `listeners` is what wires `onPointerDown` so the drag actually starts.
+- `aria-roledescription="draggable card"` — screen-reader hint.
+- The actual visual `<CardItem>` is rendered as a child. The wrapper div is purely for drag mechanics — the card's appearance is unchanged.
 
 The `data` object in `useSortable` lets us pass metadata through drag events — we use it to identify the card being dragged and its source list.
 
@@ -291,6 +359,27 @@ export default function BoardView() {
 
   const sensors = useSensors(pointerSensor, keyboardSensor);
 
+  // --- Reading the sensor setup ---
+  //
+  // **Sensors** are dnd-kit's input adapters. Each sensor watches a
+  // different input source (mouse/touch via `PointerSensor`, keyboard via
+  // `KeyboardSensor`).
+  //
+  // **`activationConstraint: { distance: 5 }`** — drag activation isn't
+  // triggered until the pointer has moved 5 pixels. Without this, every
+  // simple click would be interpreted as a tiny drag — clicking a card to
+  // open the modal would start a drag-and-snap-back instead. The 5px
+  // threshold means brief clicks remain clicks; only sustained motion
+  // starts a drag.
+  //
+  // **`coordinateGetter: sortableKeyboardCoordinates`** — for keyboard
+  // accessibility. When the user tabs to a card and presses arrow keys,
+  // this function maps key presses to drag coordinates. dnd-kit ships
+  // sortable-aware coordinate getters; we just plug it in.
+  //
+  // **`useSensors(...)`** — combines multiple sensors into the array
+  // shape `<DndContext>` expects. Pass it via the `sensors` prop.
+
   // --- Drag Handlers ---
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
@@ -383,6 +472,35 @@ export default function BoardView() {
     [board, dispatch]
   );
 
+  // --- Reading the optimistic-update flow ---
+  //
+  // **`JSON.parse(JSON.stringify(board))`** — a quick **deep clone**. The
+  // `JSON.stringify` serializes every nested field into a string; the
+  // `JSON.parse` reads it back as a brand-new object tree. The result is
+  // a complete copy where mutating the snapshot doesn't affect the live
+  // board. This trick has limitations (loses Date objects, functions,
+  // undefined fields) but works fine here because our state is plain
+  // serializable data.
+  //
+  // **The five-step pattern**:
+  //   1. Snapshot — capture state BEFORE we change anything.
+  //   2. Optimistic dispatch — UI moves instantly via the synchronous
+  //      `moveCardOptimistic` reducer (which uses Immer to mutate
+  //      nested cards/lists).
+  //   3. Async API call — the network request happens in the background.
+  //   4. Success — refetch the board so our local state matches the
+  //      server's authoritative version. (The server may have changed
+  //      positions in subtle ways our optimistic update missed.)
+  //   5. Failure — dispatch `revertBoard(snapshot)` to restore the saved
+  //      state. The card snaps back to its original position.
+  //
+  // **`useCallback(..., [board, dispatch])`** — memoizes the handler so
+  // it doesn't get recreated every render. The dependency list ensures it
+  // captures the current `board` and `dispatch` references. dnd-kit's
+  // `<DndContext>` doesn't memoize its prop comparisons, so this is more
+  // about consistency than performance, but the dependency list catches
+  // stale closures if `board` were to change mid-drag.
+
   if (!board) return null;
 
   return (
@@ -392,6 +510,24 @@ export default function BoardView() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
+
+      {/*
+        --- Reading the DndContext props ---
+
+        sensors           — array of input adapters built above
+        collisionDetection — algorithm that picks the active drop target
+                            when multiple are under the pointer
+        onDragStart        — fires when a drag begins; we use it to set
+                            activeCard so the DragOverlay shows the
+                            floating preview
+        onDragEnd          — fires when the user releases; we resolve the
+                            drop target and run the optimistic-update
+                            pattern
+
+        DndContext also accepts onDragOver, onDragMove, onDragCancel — we
+        skip them here because closestCorners + onDragEnd is enough for
+        Kanban behavior.
+      */}
       <div className="board-view">
         <div className="board-view__header">
           <h2>{board.name}</h2>

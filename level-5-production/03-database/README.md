@@ -143,6 +143,54 @@ CREATE INDEX idx_cards_assignee    ON cards(assignee_id);
 CREATE INDEX idx_comments_card     ON comments(card_id);
 ```
 
+### Reading This Schema Line-by-Line
+
+Most of the SQL grammar (`CREATE TABLE`, `SERIAL PRIMARY KEY`, `VARCHAR`, `NOT NULL`, `DEFAULT`, `REFERENCES ... ON DELETE CASCADE`, `CREATE INDEX`) was covered in Levels 2 and 3. Level 5 introduces three new things — let's walk them.
+
+```sql
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS cards;
+DROP TABLE IF EXISTS lists;
+DROP TABLE IF EXISTS board_members;
+DROP TABLE IF EXISTS boards;
+DROP TABLE IF EXISTS users;
+```
+
+**Reverse-dependency drop order**. Foreign keys mean child tables must be dropped before parent tables. Dropping `users` first would fail because `boards.owner_id` still references it. We drop in **reverse** of the order we create — comments before cards before lists before boards before users.
+
+```sql
+CREATE TABLE board_members (
+  id             SERIAL PRIMARY KEY,
+  board_id       INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role           VARCHAR(20) DEFAULT 'member',
+  joined_at      TIMESTAMP DEFAULT NOW(),
+  UNIQUE(board_id, user_id)
+);
+```
+
+The **junction table** for the many-to-many relationship between users and boards. Two new ideas:
+
+- **Two foreign keys in one row** — `board_id` references `boards`, `user_id` references `users`. Together they pair a user with a board. Each `id` (the row's own primary key) is meaningless on its own — what matters is the `(board_id, user_id)` pair.
+- **`UNIQUE(board_id, user_id)`** — a **composite unique constraint**. The pair must be unique across the table. You cannot insert two rows with the same `(board_id, user_id)` combination. So a user can join a board only once. Without this, your "Add member" feature could create duplicate memberships.
+
+```sql
+assignee_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+```
+
+**`ON DELETE SET NULL`** — a new variant of the foreign-key cascade rule. When the referenced user is deleted, instead of deleting the card too (`CASCADE`) or refusing the delete (`RESTRICT`), this **sets the column to NULL**. The card stays in the table; it just no longer has an assignee.
+
+Used here because the real-world rule is: when someone leaves the team, their cards stay (someone else can pick them up). Compare with `comments.user_id`, which uses `CASCADE` because a comment has no meaning without its author.
+
+```sql
+CREATE INDEX idx_lists_position    ON lists(board_id, position);
+CREATE INDEX idx_cards_position    ON cards(list_id, position);
+```
+
+**Composite indexes** — indexes on more than one column. The order matters: this index is optimized for queries that filter by `board_id` first, then sort by `position`. Exactly the query pattern of "show me all lists on board X in display order."
+
+A single-column index on `position` would be useless on its own (positions repeat across boards). A composite index on `(board_id, position)` lets PostgreSQL find all lists for a board AND have them pre-sorted in one go.
+
 ### Table-by-Table Breakdown
 
 **users** — same as Level 3, plus `display_name`
@@ -408,6 +456,41 @@ seed().catch((err) => {
 });
 ```
 
+### Reading This Seed Script
+
+This is the most complex seed in the curriculum. Most of the patterns repeat from Level 4's seed — `pool.query`, `INSERT ... RETURNING`, the `await pool.end()` cleanup. The new pieces:
+
+```typescript
+await pool.query("ALTER SEQUENCE users_id_seq RESTART WITH 1");
+```
+
+**`ALTER SEQUENCE ... RESTART WITH 1`** — `SERIAL` columns use a hidden counter (a "sequence") to generate IDs. After deleting and re-inserting, the sequence keeps counting from where it left off. This SQL resets the counter to 1 so re-seeded IDs start fresh. Without it, your seeded users might end up with IDs 100, 101, 102 instead of 1, 2, 3.
+
+```typescript
+const [alex, sam, jordan] = users.rows;
+```
+
+**Array destructuring**. `users.rows` is an array; `[alex, sam, jordan]` pulls the first three rows into named variables. We use them below: `alex.id`, `sam.id`, `jordan.id`.
+
+```sql
+INSERT INTO board_members (board_id, user_id, role) VALUES
+  ($1, $2, 'owner'),
+  ($1, $3, 'member'),
+  ($1, $4, 'member'),
+  ($5, $3, 'owner'),
+  ($5, $2, 'member')
+```
+
+**Multi-row `INSERT`**. One `INSERT` statement, five rows, all sent in a single trip to the database. Faster than five separate inserts (single round-trip, single transaction). Each parenthesized group is one row's values.
+
+Notice how `$1` (the Product Launch board ID) is reused in three rows — the same parameter can appear multiple times in the SQL. We pass `[productBoard.id, alex.id, sam.id, jordan.id, sprintBoard.id]` as the params array.
+
+```sql
+'I''ve started on the wireframes...'
+```
+
+**Escaped single quote in SQL**. SQL strings use single quotes, so to include a literal single quote in the string, you double it. `'I''ve'` represents the string `I've`. The same letter doubled also works in many other databases.
+
 Run the schema and seed:
 
 ```bash
@@ -429,6 +512,13 @@ FROM boards b
 JOIN board_members bm ON b.id = bm.board_id
 WHERE bm.user_id = 1;
 ```
+
+**Reading this query token-by-token:**
+
+- `SELECT b.id, b.name, bm.role` — pick three columns from the joined result. Notice the `b.` and `bm.` prefixes — those are **table aliases** to disambiguate which table each column comes from.
+- `FROM boards b` — start with the `boards` table, aliased as `b`. The space-then-letter syntax assigns the alias.
+- `JOIN board_members bm ON b.id = bm.board_id` — combine each board with rows in `board_members` where `b.id` (board's own id) matches `bm.board_id` (the membership's reference to the board). One board with three members produces three rows in the joined result, one per member.
+- `WHERE bm.user_id = 1` — keep only rows where this membership is for user 1. Net result: every board user 1 belongs to.
 
 This JOIN finds boards where user 1 is a member. It returns the board name and the user's role.
 
@@ -455,6 +545,18 @@ JOIN users u ON cm.user_id = u.id
 WHERE c.id = 1
 ORDER BY cm.created_at;
 ```
+
+**Reading this multi-table JOIN:**
+
+Three tables, two JOINs:
+
+- `FROM cards c` — start with cards (alias `c`).
+- `JOIN comments cm ON c.id = cm.card_id` — chain on each comment whose `card_id` matches a card's `id`.
+- `JOIN users u ON cm.user_id = u.id` — chain again on each user whose `id` matches the comment's `user_id`. Now each result row contains: card columns + comment columns + user columns.
+- `WHERE c.id = 1` — narrow to one specific card.
+- `ORDER BY cm.created_at` — sort comments oldest first.
+
+JOINs chain left-to-right. Conceptually, PostgreSQL builds an intermediate result after each JOIN, then chains again. The query optimizer reorders the actual execution using indexes — but the result is the same.
 
 This chains two JOINs: cards → comments → users. Each comment includes the author's display name.
 

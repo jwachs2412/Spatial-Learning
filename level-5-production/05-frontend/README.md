@@ -2,6 +2,17 @@
 
 # 05 — Frontend: Board UI, Redux Slices, and Card Details
 
+> **Most patterns carry from earlier levels.** JSX/hooks (Level 1), service layer + types (Level 2), Bearer-token auth + AuthContext + Protected routes (Level 3), Redux Toolkit slices/thunks/selectors and the `request<T>` helper (Level 4) — all explained in those lessons.
+>
+> **What's new in Level 5 frontend:**
+> - **Optimistic reducer pattern** — synchronous `moveCardOptimistic` reducer that mutates nested state via Immer (`.splice`, `.push`, position recalculation), with a separate async thunk for the server round-trip. The thunk's `rejected` case triggers a refetch.
+> - **Modal pattern** — `<Modal>` component using `<dialog>` semantics (or fixed-position overlay). Card detail editing happens here.
+> - **Nested Redux state mutation** — finding a list inside the board, finding a card inside the list, mutating both. Possible because Immer makes deep mutations safe.
+> - **Route params** — `useParams()` from React Router to read `:id` from the URL.
+> - The actual drag-and-drop wiring (DndContext, useSortable, sensors) lives in **Step 6 — Drag and Drop**.
+>
+> Every code block below has a "Reading This File Line-by-Line" walkthrough using these.
+
 ## Spatial Orientation
 
 The frontend connects to every backend module. React Router handles page-level navigation. Redux manages auth tokens, board lists, and card state. The API service layer centralizes all HTTP calls with automatic token injection.
@@ -617,6 +628,49 @@ const boardSlice = createSlice({
       targetList.cards.forEach((c, i) => (c.position = i));
     },
   },
+
+  // --- Reading moveCardOptimistic line-by-line ---
+  //
+  // This synchronous reducer mirrors the backend's moveCard transaction in
+  // memory. The user dispatches it the moment a drag ends — the UI updates
+  // instantly. A separate thunk later asks the server to confirm.
+  //
+  // **`if (!state.currentBoard) return;`** — guard. If no board is loaded,
+  // there's nothing to update. Returning from a reducer with no changes is
+  // perfectly fine; Redux just keeps the previous state.
+  //
+  // **Find the source list and card index**:
+  //   `state.currentBoard.lists.find((l) => l.id === sourceListId)`
+  //   `sourceList.cards.findIndex((c) => c.id === cardId)`
+  // - `.find(predicate)` returns the first matching item or `undefined`.
+  // - `.findIndex(predicate)` returns the index (number) of the first match
+  //   or `-1` if no match. We use `-1` to bail out cleanly.
+  //
+  // **`const [card] = sourceList.cards.splice(cardIndex, 1);`**
+  //   - `array.splice(start, count)` REMOVES `count` items from `array`
+  //     starting at `start` and RETURNS them as a new array.
+  //   - With `count = 1`, the return is `[card]` — a one-item array.
+  //   - We array-destructure into `card` to grab that single item.
+  //   - Net effect: the card is gone from sourceList, and we have a
+  //     reference to it in the local variable `card`.
+  //
+  // **`card.list_id = targetListId;`** — mutate the card's list_id so its
+  // identity matches its new home. Immer tracks this mutation.
+  //
+  // **`targetList.cards.splice(targetPosition, 0, card);`**
+  //   - `array.splice(start, count, ...items)` — when `count` is `0` and
+  //     items follow, it INSERTS without removing anything. So this
+  //     "inject `card` at index `targetPosition` of targetList.cards."
+  //
+  // **The two `forEach` loops** recalculate the `position` field on every
+  // card after the move, since shifting one card means others shifted too.
+  //   `(c, i) => (c.position = i)` — for each card and its new index, set
+  //   the card's position to that index. The parens around `c.position = i`
+  //   are required because of the arrow function's concise body.
+  //
+  // All these mutations look dangerous in normal JavaScript. With Immer
+  // (built into RTK), they produce a brand-new immutable state object
+  // behind the scenes — components see a new reference and re-render.
   extraReducers: (builder) => {
     builder.addCase(fetchBoard.pending, (state) => {
       state.loading = true;
@@ -995,6 +1049,28 @@ export default function BoardView() {
     return () => { dispatch(clearBoard()); };
   }, [dispatch, id]);
 
+  // --- Reading the BoardView setup ---
+  //
+  // **`useParams<{ id: string }>()`** — React Router hook. Returns an object
+  // of URL parameters declared in the route path. For the route
+  // `/boards/:id`, `useParams()` returns `{ id: '5' }` when the URL is
+  // `/boards/5`. The generic `<{ id: string }>` types the return value so
+  // TypeScript knows what's there. URL params are always strings, even for
+  // numeric IDs — we convert with `Number(id)` below.
+  //
+  // **`selectedCardId`** local state (not Redux) — which card's modal is
+  // open. Local because it's UI-only state. No other component cares which
+  // modal is open.
+  //
+  // **`useEffect` with cleanup**:
+  //   - The body runs on mount and whenever `id` changes (e.g., navigating
+  //     between boards): dispatch fetchBoard.
+  //   - `return () => { dispatch(clearBoard()); }` is the **cleanup
+  //     function**. React calls it before the effect re-runs AND when the
+  //     component unmounts. We dispatch `clearBoard` to reset the slice's
+  //     currentBoard to null so the next board doesn't briefly show the
+  //     old data.
+
   function handleCreateList(e: FormEvent) {
     e.preventDefault();
     if (!newListName.trim() || !board) return;
@@ -1155,6 +1231,12 @@ export default function CardItem({ card, onClick }: CardItemProps) {
 ```
 
 ### CardDetailModal — full card view with comments
+
+> **Reading the modal pattern.** The card detail is rendered inside a `<Modal>` overlay (defined later). The component:
+> - Maintains its own local state for the card detail (we don't keep this in Redux because only this component needs it).
+> - Fetches once on open via `useEffect`.
+> - Each edit (description, assignee, comments) calls the API and locally updates `card` so the modal reflects the change immediately. Slice updates happen via dispatched thunks for changes that affect the board view (assignee shows on the card preview).
+> - `onClose` closes the modal by clearing the parent's `selectedCardId` state.
 
 Create `src/features/board/CardDetailModal.tsx`:
 
@@ -1397,6 +1479,34 @@ export default function Modal({ children, onClose }: ModalProps) {
     </div>
   );
 }
+
+// --- Reading the Modal ---
+//
+// **Two new browser-platform pieces** that you haven't seen before:
+//
+// **`window.addEventListener('keydown', handler)`** — listen for keyboard
+// events at the global level. Whenever any key is pressed anywhere in the
+// page, `handler` runs and inspects `e.key`. We close the modal when the
+// user presses Escape — a common UX expectation.
+//
+// **`return () => window.removeEventListener(...)`** — the effect's
+// cleanup function. React calls it when the modal unmounts. Without
+// `removeEventListener`, the listener would stick around forever even
+// after the modal is gone, leaking memory and reacting to keys when no
+// modal is open.
+//
+// The listener and remover MUST refer to the same function reference. We
+// declared `handleKey` once with `function handleKey(...)` and pass it to
+// both `addEventListener` and `removeEventListener`. If we used different
+// arrow functions, removeEventListener would silently fail.
+//
+// **Backdrop click + stopPropagation**:
+//   `<div className="modal-backdrop" onClick={onClose}>`
+//   `  <div className="modal-content" onClick={(e) => e.stopPropagation()}>`
+// Click on the dark backdrop → close the modal. But clicking *inside* the
+// content (a button, an input) shouldn't close it. Without
+// `stopPropagation`, clicks inside the content would BUBBLE UP to the
+// backdrop's onClick. The inner `e.stopPropagation()` blocks the bubble.
 ```
 
 ### Layout

@@ -2,6 +2,8 @@
 
 # 02 — Project Setup: Modular Scaffold
 
+> **Most of this lesson reuses commands and configs from Levels 1–4.** `mkdir`, `cd`, `git init`, the `.gitignore` patterns, the `tsconfig.json` shape, the `package.json` scripts, the Vitest configs, the shared-type interface pattern — all explained in detail in the corresponding setup lessons of earlier levels. This lesson only unpacks **what's new in Level 5**: nested brace expansion, the `@dnd-kit/*` packages, `@sentry/react`, and the deeply-nested types CollabBoard's API needs.
+
 ## Spatial Orientation
 
 Same monorepo pattern as before — `client/` and `server/` — but with a modular backend and a `.github/workflows/` directory for CI/CD.
@@ -92,6 +94,23 @@ React, TypeScript, Redux Toolkit, dnd-kit, Express, PostgreSQL
 mkdir -p server/src/{modules/{auth,boards,lists,cards,comments},middleware,db,types}
 mkdir -p server/tests
 ```
+
+**Reading that nested brace-expansion line:**
+
+The shell expands the braces from the inside out. The inner `{auth,boards,lists,cards,comments}` becomes five separate words; the outer `{modules/{...},middleware,db,types}` then layers on top. The whole one-liner expands to nine `mkdir` calls:
+
+```bash
+mkdir -p server/src/modules/auth
+mkdir -p server/src/modules/boards
+mkdir -p server/src/modules/lists
+mkdir -p server/src/modules/cards
+mkdir -p server/src/modules/comments
+mkdir -p server/src/middleware
+mkdir -p server/src/db
+mkdir -p server/src/types
+```
+
+`-p` means "create parent folders too if missing," so `server/`, `server/src/`, and `server/src/modules/` all appear automatically. One line of typing instead of nine.
 
 > [!IMPORTANT]
 > **You should be in:** `collab-board/`
@@ -215,6 +234,15 @@ npm install @reduxjs/toolkit react-redux react-router-dom @dnd-kit/core @dnd-kit
 | `@dnd-kit/sortable` | Sortable lists and items | **NEW** |
 | `@dnd-kit/utilities` | CSS transform helpers | **NEW** |
 | `@sentry/react` | Error monitoring | **NEW** |
+
+**The four new packages — what they actually do:**
+
+- **`@dnd-kit/core`** — the base drag-and-drop engine. Provides `<DndContext>` (top-level wrapper), `useDraggable` (mark something as draggable), `useDroppable` (mark a target zone), and `onDragEnd` (a callback fired when the user drops). It handles all the pointer/keyboard/touch tracking under the hood.
+- **`@dnd-kit/sortable`** — adds **sortable list** behavior on top of core. When you drag a card from position 2 to position 4, sortable shifts the other cards to make room and computes the new ordering. Without this, you'd manually calculate every position. Provides `<SortableContext>` and `useSortable`.
+- **`@dnd-kit/utilities`** — small helper functions, primarily `CSS.Transform.toString()` for converting drag offsets into CSS transform strings. Used inside draggable components to animate them as the user drags.
+- **`@sentry/react`** — the JavaScript client for Sentry, an error-monitoring service. When an unhandled error happens in production, Sentry captures it (with stack trace, user info, browser version, the URL when it happened) and sends it to your dashboard. Without Sentry, you find out about bugs from angry users; with Sentry, you find out the moment they happen.
+
+The `@scope/name` syntax is **scoped npm packages** — packages published under an organization namespace. `@dnd-kit/core` lives under the `@dnd-kit` org. The slash isn't a folder; it's part of the package name.
 
 ```bash
 npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
@@ -486,6 +514,65 @@ export interface Comment {
 
 export interface CommentWithUser extends Comment {
   user: SafeUser;
+}
+```
+
+### Reading the Nested Types
+
+Six base types match six database tables: `User`, `Board`, `BoardMember`, `List`, `Card`, `Comment`. Then **richer composed types** model what the API actually returns. Let's walk the nesting:
+
+```typescript
+export type SafeUser = Omit<User, 'password_hash'>;
+```
+
+`Omit<X, K>` (built-in TypeScript utility): the type `X` with key `K` removed. `SafeUser` is a `User` minus the password hash. Same pattern as Level 3.
+
+```typescript
+export interface BoardWithLists extends Board {
+  lists: ListWithCards[];
+}
+
+export interface ListWithCards extends List {
+  cards: CardWithAssignee[];
+}
+
+export interface CardWithAssignee extends Card {
+  assignee: SafeUser | null;
+}
+```
+
+`extends` in interfaces means "all fields of the parent, plus these new ones." So `BoardWithLists` has every Board field PLUS `lists: ListWithCards[]`. `ListWithCards` has every List field PLUS `cards: CardWithAssignee[]`. And so on, three levels deep.
+
+When the backend serves `GET /api/boards/:id`, it joins across three tables and returns one big object matching `BoardWithLists`. The TypeScript shape is:
+
+```typescript
+{
+  id: 1,
+  name: 'Product Launch',
+  description: '...',
+  owner_id: 5,
+  created_at: '...',
+  updated_at: '...',
+  lists: [
+    {
+      id: 10,
+      board_id: 1,
+      name: 'To Do',
+      position: 0,
+      created_at: '...',
+      cards: [
+        {
+          id: 100,
+          list_id: 10,
+          title: 'Design mockups',
+          ...
+          assignee: { id: 5, email: '...', display_name: 'Alex', created_at: '...' },
+        },
+        // more cards...
+      ],
+    },
+    // more lists...
+  ],
 }
 ```
 
