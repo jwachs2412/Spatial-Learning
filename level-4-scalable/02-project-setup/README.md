@@ -2,6 +2,8 @@
 
 # 02 — Project Setup: Feature-Based Scaffold
 
+> **Most of this lesson reuses commands you already know.** `mkdir`, `cd`, `git init`, `.gitignore`, `npm init -y`, the `tsconfig.json` shape, the `package.json` scripts pattern — all explained in detail in Levels 1–3 Step 2. This lesson only unpacks **what's new** in Level 4: the testing tools (`vitest`, `jsdom`, Testing Library), the logging/rate-limit packages (`pino`, `pino-http`, `express-rate-limit`), the Redux/charting libraries (`@reduxjs/toolkit`, `react-redux`, `recharts`), the Vitest config files, and the `formatters.ts` helpers.
+
 ## Spatial Orientation
 
 Same monorepo pattern as Levels 2-3 — a `client/` and `server/` inside a single project folder. The new elements: **feature-based folder structure** on the frontend, a **middleware directory** on the backend, and **test configuration** in both.
@@ -121,6 +123,12 @@ npm install express cors dotenv pg pino pino-http express-rate-limit
 | `pino-http` | HTTP request logging middleware | **NEW** |
 | `express-rate-limit` | Request rate limiting | **NEW** |
 
+**The three new runtime packages — what they actually do:**
+
+- **`pino`** — a high-performance JSON logger. Instead of `console.log('User logged in')` (a plain string), pino emits `{"level":"info","time":1735689600000,"msg":"User logged in"}` (structured JSON). Production log aggregators (Datadog, Splunk, CloudWatch) parse JSON logs automatically; plain strings require fragile regex parsing. Pino is also ~5x faster than alternatives because it serializes JSON in worker threads.
+- **`pino-http`** — Express middleware built on top of pino. Logs every incoming request automatically (method, URL, status, response time) with one `app.use(httpLogger)` call. Without it, you'd write logging by hand in every route.
+- **`express-rate-limit`** — Express middleware that throttles excessive requests from a single IP. Configurable: "max 100 requests per 15 minutes" or "max 20 requests per minute for this expensive endpoint." Returns `429 Too Many Requests` when exceeded.
+
 ```bash
 npm install typescript @types/node @types/express @types/cors @types/pg
 ```
@@ -144,6 +152,14 @@ npm install -D tsx vitest supertest @types/supertest pino-pretty
 | `supertest` | HTTP assertion library | **NEW** |
 | `@types/supertest` | Supertest types | **NEW** |
 | `pino-pretty` | Readable log formatting in development | **NEW** |
+
+**The three new dev packages — what they actually do:**
+
+- **`vitest`** — a test runner. You write functions that assert "this code, given that input, should produce this output." Run `npm test` and Vitest finds every `*.test.ts` file, executes the assertions, and reports pass/fail. Same role as Jest but built on Vite — much faster and uses the same module system as your app.
+- **`supertest`** — a library for testing HTTP servers without actually starting them. You give it your Express `app` object, and it lets you write `request(app).get('/api/health').expect(200)`. Under the hood it spins up the server in-process, sends the request, and reads the response. Used in API tests later in Level 4.
+- **`pino-pretty`** — pretty-prints pino's JSON logs as colorful human-readable text during development. In production we keep raw JSON for the log aggregator; in dev we want to read with our eyes.
+
+**About `tsx` (carried, but worth noting):** Levels 1–3 used `ts-node` to run TypeScript directly. Level 4 switches to `tsx`. They do the same job — execute `.ts` files without a separate compile step — but `tsx` is faster (uses esbuild) and has better defaults. The package script `"dev": "tsx watch src/index.ts"` is the equivalent of `"nodemon --exec ts-node src/index.ts"` from earlier levels.
 
 > [!WARNING]
 > **`@types/node` and other `@types` packages MUST be regular dependencies (not `--save-dev` / `-D`).**
@@ -233,6 +249,12 @@ npm install @reduxjs/toolkit react-redux recharts
 | `react-redux` | React bindings for Redux |
 | `recharts` | Charting library built on D3 |
 
+**The three new frontend packages — what they actually do:**
+
+- **`@reduxjs/toolkit`** (often abbreviated **RTK**) — the modern way to use Redux. Redux is a state-management pattern: instead of state living inside individual components, it lives in one central "store" that any component can read from or write to. RTK reduces the boilerplate the original Redux library required. You'll define "slices" of state with reducers and actions; you'll write selectors to read; you'll dispatch actions to update. All explained in detail in the next lesson.
+- **`react-redux`** — the React-specific glue for Redux. Provides `<Provider store={...}>` (wraps your app so components can access the store), `useSelector` (read state), and `useDispatch` (send actions). Without `react-redux`, you'd be calling Redux's vanilla API by hand from every component.
+- **`recharts`** — a React charting library. You write `<LineChart>`, `<BarChart>`, `<PieChart>` components and pass them data; they render SVG charts that respond to props. Built on D3 (an industry-standard data-viz library) but exposes a React-friendly API.
+
 ```bash
 npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
 ```
@@ -244,6 +266,14 @@ npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @te
 | `@testing-library/react` | React component testing utilities |
 | `@testing-library/jest-dom` | Custom DOM matchers (toBeInTheDocument, etc.) |
 | `@testing-library/user-event` | Simulate real user interactions in tests |
+
+**The frontend testing stack explained:**
+
+- **`vitest`** — same test runner as the backend. Reused.
+- **`jsdom`** — a JavaScript implementation of the browser's DOM that runs inside Node. Tests can render React components into this fake DOM and inspect the result. Without jsdom, `document.createElement` doesn't exist in Node and your component tests can't run.
+- **`@testing-library/react`** (often abbreviated **RTL**) — a small library for writing component tests. Exposes `render(<Component />)`, `screen.getByText('Hello')`, `screen.getByRole('button')` etc. The Testing Library philosophy: test what users see and do, not implementation details.
+- **`@testing-library/jest-dom`** — adds custom assertions: `expect(element).toBeInTheDocument()`, `.toHaveTextContent('foo')`, `.toBeVisible()`. Without it, you'd write awkward DOM queries in every assertion.
+- **`@testing-library/user-event`** — simulates realistic user input. `await user.click(button)`, `await user.type(input, 'hello')`. Better than firing raw events because it mimics the full sequence (focus → keydown → keyup → change) a real browser produces.
 
 ### Create Feature-Based Folder Structure
 
@@ -297,15 +327,23 @@ export default defineConfig({
 });
 ```
 
-Line-by-line:
+### Reading This Config Line-by-Line
 
-| Line | Purpose |
-|------|---------|
-| `plugins: [react()]` | Enables JSX transformation in tests |
-| `environment: 'jsdom'` | Simulates a browser DOM for component tests |
-| `globals: true` | Makes `describe`, `it`, `expect` available without imports |
-| `setupFiles` | Runs before each test file (for custom matchers) |
-| `css: true` | Processes CSS imports instead of ignoring them |
+This file looks similar to a `vite.config.ts` because Vitest is built on top of Vite — same module graph, same plugins, same configuration shape.
+
+- `import { defineConfig } from 'vitest/config';`
+  - Named import. `defineConfig` is a no-op at runtime — it returns the object you pass in. Its job is to give TypeScript autocomplete on the config object so you don't have to remember every option.
+- `import react from '@vitejs/plugin-react';`
+  - Default import of Vite's React plugin. Without it, JSX in your test files would be treated as invalid syntax.
+- `export default defineConfig({ ... });`
+  - Default export of the config. Vitest reads this file when you run `npm test` and honors the settings.
+- `plugins: [react()]`
+  - The `plugins` array activates Vite plugins. We call `react()` to enable JSX transformation. The `()` matters — `react` (no parens) is a function; `react()` is its result, the plugin instance.
+- `test: { ... }` — Vitest-specific options:
+  - `environment: 'jsdom'` — runs each test in a simulated browser DOM (provided by the `jsdom` package). Without this, `document` and `window` don't exist and React component tests fail immediately.
+  - `globals: true` — makes test functions like `describe`, `it`, `expect`, `beforeEach` available globally. Without this, you'd `import { describe, it, expect } from 'vitest'` at the top of every test file.
+  - `setupFiles: './src/test-setup.ts'` — runs this file once before any test starts. Used to register custom assertions or mock global APIs.
+  - `css: true` — when a component file does `import './Button.css'`, normally Node doesn't know what to do with CSS imports. This option tells Vitest to load and parse them so imports don't crash the test.
 
 Create the test setup file `client/src/test-setup.ts`:
 
@@ -313,7 +351,18 @@ Create the test setup file `client/src/test-setup.ts`:
 import '@testing-library/jest-dom';
 ```
 
-This single import adds custom matchers like `toBeInTheDocument()`, `toHaveTextContent()`, and `toBeVisible()` to all test files.
+### Reading This One Line
+
+A **side-effect-only import**. No name, no curly braces — we're not pulling out anything to use. We're saying: "load this module for its side effects."
+
+Inside `@testing-library/jest-dom`, the package extends Vitest's (and Jest's) `expect` object with new assertion methods. After this import runs:
+
+- `expect(element).toBeInTheDocument()` works.
+- `expect(element).toHaveTextContent('Hello')` works.
+- `expect(element).toBeVisible()` works.
+- A dozen other DOM-specific matchers become available.
+
+Without this setup file, calling those assertions throws "expect.toBeInTheDocument is not a function." Vitest's `setupFiles` config makes this run before every test file, so every test gets the matchers automatically.
 
 Update `client/package.json` scripts:
 
@@ -597,7 +646,80 @@ export function formatPercentage(decimal: number): string {
 }
 ```
 
-These are pure functions — they take input and return output with no side effects. Pure functions are the easiest code to test, which you'll do in Step 6 (Testing).
+### Reading This File Line-by-Line
+
+Six small helpers. Each one wraps a built-in JavaScript API to give you a domain-friendly name. Let's unpack each.
+
+```typescript
+export function formatNumber(num: number): string {
+  return num.toLocaleString();
+}
+```
+
+- `num.toLocaleString()` — every JavaScript number has a `.toLocaleString()` method. Built into the language. By default it formats according to the user's locale: in the US it adds commas (`12847` → `'12,847'`); in Germany it uses periods (`'12.847'`); in France it uses spaces (`'12 847'`). Free internationalization.
+
+```typescript
+export function formatCurrency(num: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(num);
+}
+```
+
+- `Intl.NumberFormat` is a built-in JavaScript class for advanced number formatting. `Intl` is the **Internationalization API** — also built-in, no dependencies needed.
+- `new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })` — creates a formatter for US dollars.
+- `.format(num)` — applies the formatter and returns a string. So `8291.5` becomes `'$8,291.50'`. Notice it adds the dollar sign, the comma, and the trailing zero automatically.
+
+```typescript
+export function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+```
+
+- `Math.floor(seconds / 60)` — integer division. `272 / 60 = 4.5333...`; `Math.floor(4.5333)` is `4`.
+- `seconds % 60` — the **modulo operator**. Returns the remainder after division. `272 % 60 = 32`. So 272 seconds = 4 minutes, 32 seconds.
+- `secs.toString().padStart(2, '0')` — `.toString()` converts the number to a string; `.padStart(2, '0')` left-pads the string to length 2 with `'0'`. So `5` becomes `'5'` becomes `'05'`. This is what gives you `'4:05'` instead of `'4:5'`.
+- The template literal `\`${mins}:${secs...}\`` glues it all together.
+
+```typescript
+export function formatDate(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+```
+
+- `new Date(dateStr + 'T00:00:00')` — appending `'T00:00:00'` to a `'YYYY-MM-DD'` string forces JavaScript to parse it in the **local time zone**. Without this, just `new Date('2025-03-15')` would parse as UTC midnight, which displays as the previous day in most US time zones — a notorious bug source.
+- `.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })` — produces output like `'Mar 15'`. The options object picks which fields to include (`'short'` for `Mar` instead of `March` or `03`).
+
+```typescript
+export function formatDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+```
+
+Same `Date` API but with more fields. The `.toLocaleDateString(...)` method, despite "Date" in its name, can include time when you pass `hour` and `minute` options. Output: `'Mar 15, 2025 10:30 AM'`.
+
+```typescript
+export function formatPercentage(decimal: number): string {
+  return `${(decimal * 100).toFixed(1)}%`;
+}
+```
+
+- `(decimal * 100)` — convert 0.623 to 62.3.
+- `.toFixed(1)` — every number has `.toFixed(n)`, which returns a string with exactly `n` digits after the decimal point. `(62.3).toFixed(1)` is `'62.3'`. `(62).toFixed(1)` is `'62.0'`.
+- Wrap in a template literal with a `%` sign appended.
+
+These are **pure functions** — they take input and return output with no side effects (no DOM access, no API calls, no random numbers, no `Date.now()` for the duration/percentage helpers). Pure functions are the easiest code to test, which you'll do in Step 6 (Testing).
 
 ---
 

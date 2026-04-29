@@ -2,6 +2,24 @@
 
 # 04 — State Management: Redux Toolkit
 
+## New Syntax You'll Meet in This Lesson
+
+Redux Toolkit (RTK) introduces a small vocabulary that recurs in every slice. Read this once and the 700+ lines that follow are variations on the same shapes.
+
+- **`configureStore({ reducer: {...} })`** — RTK's store factory. Replaces classic Redux's `combineReducers` + `createStore` + middleware setup with sane defaults.
+- **`createSlice({ name, initialState, reducers, extraReducers })`** — bundles state, actions, and reducers into one declaration. Generates action creators (`slice.actions`) and a reducer (`slice.reducer`) automatically.
+- **`PayloadAction<T>`** — a TypeScript type for an action whose `payload` is of type `T`. Used to type reducer parameters: `(state, action: PayloadAction<string>) => { ... }`.
+- **Immer "mutations"** — inside RTK reducers you can write `state.x = y` or `state.list.push(item)`. Looks like mutation, but Immer (built into RTK) tracks your changes and produces a new immutable state object behind the scenes. You get readable code without the spread-operator gymnastics classic Redux required.
+- **`createAsyncThunk('slice/name', async (arg) => {...})`** — wraps an async function to auto-dispatch three actions: `slice/name/pending`, `slice/name/fulfilled`, `slice/name/rejected`. The state of every API call gets these three events for free.
+- **`extraReducers: (builder) => builder.addCase(actionCreator, (state, action) => {...})`** — handles actions defined outside this slice (especially thunk actions). The builder pattern lets you respond to pending/fulfilled/rejected without manually dispatching.
+- **`useSelector` and `useDispatch`** (from `react-redux`) — React hooks. `useSelector(state => state.thing)` reads from the store and re-renders when the slice it returns changes. `useDispatch()` returns the dispatch function so components can fire actions.
+- **`<Provider store={store}>`** — the React component that makes the store available to descendants. Wraps your whole app once at the entry point.
+- **`ReturnType<typeof store.getState>`** — a TypeScript type-level operation. `typeof store.getState` is the type of the function; `ReturnType<F>` extracts the return type. So this captures the exact shape of your state without you writing it out by hand.
+- **`URLSearchParams`** — a built-in browser API for building query strings safely (`?startDate=...&category=...`). Handles URL-encoding for you.
+- **`Promise.all([p1, p2, p3])`** — runs multiple promises concurrently and resolves when all of them resolve.
+
+Every code block below has a "Reading This File Line-by-Line" walkthrough using these.
+
 ## Spatial Orientation
 
 Redux manages all application state in a single **store**. Components read from the store with **selectors** and update it by dispatching **actions**. Async operations (API calls) use **thunks**.
@@ -103,14 +121,45 @@ export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
 ```
 
-Line-by-line:
+### Reading This File Line-by-Line
 
-| Line | Purpose |
-|------|---------|
-| `configureStore` | Creates the Redux store with good defaults (DevTools, middleware) |
-| `reducer: { ... }` | Combines slices — each key becomes a top-level state property |
-| `RootState` | TypeScript type representing the entire store shape |
-| `AppDispatch` | TypeScript type for the dispatch function (includes thunk support) |
+```typescript
+import { configureStore } from '@reduxjs/toolkit';
+import analyticsReducer from '../features/analytics/analyticsSlice';
+import eventsReducer from '../features/events/eventsSlice';
+import filtersReducer from '../features/filters/filtersSlice';
+```
+
+- Named import of `configureStore` from RTK.
+- Three default imports of reducers from the three slices we'll build below. Each slice's `default export` is its reducer function.
+
+```typescript
+export const store = configureStore({
+  reducer: {
+    analytics: analyticsReducer,
+    events: eventsReducer,
+    filters: filtersReducer,
+  },
+});
+```
+
+- `configureStore({ reducer: {...} })` is the only call needed to build the store.
+- The `reducer` field is an object. Each key (`analytics`, `events`, `filters`) becomes a top-level slice of state. The full state object will look like `{ analytics: {...}, events: {...}, filters: {...} }`.
+- Each value is a reducer function — RTK invokes the matching one when an action is dispatched.
+- RTK also wires up the Redux DevTools extension and the thunk middleware automatically. Classic Redux required several extra lines for these.
+
+```typescript
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+```
+
+These are **TypeScript type-level operations**:
+
+- `typeof store.getState` is the type of the function `store.getState`. (At runtime `typeof` returns a string; at the type level, it captures a value's type.)
+- `ReturnType<F>` is a built-in TypeScript utility that extracts the return type of a function type. So `ReturnType<typeof store.getState>` is the type returned by calling `store.getState()` — your full state shape.
+- Similarly, `typeof store.dispatch` is the type of the dispatch function (which knows about all your thunks because RTK added them automatically).
+
+Why bother? So we can type our hooks and selectors without writing the state shape by hand. The compiler stays in sync with the store automatically.
 
 ### Typed Hooks
 
@@ -124,6 +173,15 @@ import type { RootState, AppDispatch } from './store';
 export const useAppDispatch = useDispatch.withTypes<AppDispatch>();
 export const useAppSelector = useSelector.withTypes<RootState>();
 ```
+
+### Reading This File Line-by-Line
+
+- `import { useDispatch, useSelector } from 'react-redux';` — the two core hooks from `react-redux`. They work without TypeScript, but every call requires a manual type annotation.
+- `import type { RootState, AppDispatch } from './store';` — pull in the types we just exported. The `import type` keyword tells TypeScript "these only exist for type-checking; don't include them in the compiled JavaScript."
+- `useDispatch.withTypes<AppDispatch>()` — a method on the hook itself. Returns a new hook with `AppDispatch` baked in. Calling `useAppDispatch()` returns a dispatch function that already knows about every thunk in our app.
+- `useSelector.withTypes<RootState>()` — same pattern. The selector you pass is typed: `useAppSelector((state) => state.filters)` — TypeScript autocompletes `state.filters`.
+
+Pattern to remember: import these app-specific hooks (`useAppSelector`, `useAppDispatch`) in every component, never the raw `useSelector`/`useDispatch`. That way TypeScript catches mistakes everywhere.
 
 > [!NOTE]
 > **Technical:** `useDispatch.withTypes<AppDispatch>()` creates a typed hook that knows about all your thunks. `useSelector.withTypes<RootState>()` creates a hook where the state parameter is automatically typed. Without these, you'd need to cast types on every usage.
@@ -207,6 +265,113 @@ export const selectHasActiveFilters = (state: RootState): boolean => {
 
 export default filtersSlice.reducer;
 ```
+
+### Reading This File Line-by-Line
+
+```typescript
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import type { RootState } from '../../app/store';
+import type { AnalyticsFilters } from '../../types';
+```
+
+- `createSlice` is RTK's main factory. `PayloadAction<T>` is a type for actions with a payload field of type `T`.
+- The `import type` keyword strips these from the runtime bundle (they're for the type checker only).
+
+```typescript
+interface FiltersState {
+  startDate: string | null;
+  endDate: string | null;
+  category: string | null;
+  device: string | null;
+}
+
+const initialState: FiltersState = {
+  startDate: null,
+  endDate: null,
+  category: null,
+  device: null,
+};
+```
+
+- Define the shape of this slice's state. `string | null` for each field — null means "no filter set."
+- Build an initial state matching the shape. Redux uses this when the store is created and whenever the reducer receives an unknown action.
+
+```typescript
+const filtersSlice = createSlice({
+  name: 'filters',
+  initialState,
+  reducers: {
+    setDateRange(
+      state,
+      action: PayloadAction<{ startDate: string; endDate: string }>
+    ) {
+      state.startDate = action.payload.startDate;
+      state.endDate = action.payload.endDate;
+    },
+    setCategory(state, action: PayloadAction<string | null>) {
+      state.category = action.payload;
+    },
+    setDevice(state, action: PayloadAction<string | null>) {
+      state.device = action.payload;
+    },
+    clearFilters(state) {
+      state.startDate = null;
+      state.endDate = null;
+      state.category = null;
+      state.device = null;
+    },
+  },
+});
+```
+
+- `name: 'filters'` — namespaces the auto-generated action types. Dispatching `setCategory` actually fires `'filters/setCategory'`. Helpful in the Redux DevTools to identify which slice an action belongs to.
+- `initialState` — shorthand for `initialState: initialState` (the field is the same name as the variable).
+- `reducers: { ... }` — an object where each key is a reducer name and the value is a function `(state, action) => void`.
+- `PayloadAction<{ startDate: string; endDate: string }>` types the action payload. RTK enforces that whoever dispatches `setDateRange(...)` must pass an object of this shape.
+- Inside each reducer, `state.x = y` looks like mutation, but RTK uses **Immer** under the hood. Immer wraps `state` in a proxy that records what you "mutate," then produces a brand-new immutable state object. You write readable code; Immer handles immutability for you.
+- `clearFilters` doesn't read the action payload — it ignores it. The function takes `(state)` only.
+
+```typescript
+export const { setDateRange, setCategory, setDevice, clearFilters } =
+  filtersSlice.actions;
+```
+
+- `filtersSlice.actions` is an object of **action creators** — functions that return action objects. RTK generates one per reducer.
+- Calling `setCategory('marketing')` returns `{ type: 'filters/setCategory', payload: 'marketing' }`.
+- We destructure them and re-export so components can `import { setCategory } from '../filtersSlice'` and dispatch them.
+
+```typescript
+export const selectFilters = (state: RootState): FiltersState => state.filters;
+
+export const selectActiveFilters = (state: RootState): AnalyticsFilters => {
+  const { startDate, endDate, category, device } = state.filters;
+  const filters: AnalyticsFilters = {};
+  if (startDate) filters.startDate = startDate;
+  if (endDate) filters.endDate = endDate;
+  if (category) filters.category = category;
+  if (device) filters.device = device;
+  return filters;
+};
+```
+
+- **Selectors** are pure functions that take the whole state and return a piece of it.
+- `selectFilters` returns the entire `filters` slice as-is.
+- `selectActiveFilters` returns only the filters that have a value. Useful for API calls — we want to send `?category=marketing` but not `?category=null` if the user hasn't picked a category. Building the object conditionally keeps the URL clean.
+
+```typescript
+export const selectHasActiveFilters = (state: RootState): boolean => {
+  const { startDate, endDate, category, device } = state.filters;
+  return !!(startDate || endDate || category || device);
+};
+```
+
+- `!!` is a **double negation** trick to coerce any value to a strict boolean. `!value` returns the opposite as a boolean; `!!value` flips it back. So if any of the four is truthy, this returns `true`; otherwise `false`. Used by the UI to decide whether to show the "Clear Filters" button.
+
+```typescript
+export default filtersSlice.reducer;
+```
+
+- The slice's reducer goes out as the default export. `store.ts` imports it and registers it under the `filters` key.
 
 ### Anatomy of a Slice
 
@@ -399,6 +564,111 @@ export const selectAnalyticsError = (state: RootState) => state.analytics.error;
 export default analyticsSlice.reducer;
 ```
 
+### Reading This File Line-by-Line
+
+This is the most pattern-dense file in Level 4. We'll go in three chunks: **state shape**, **thunks**, and **slice with extraReducers**.
+
+#### Chunk 1: State Shape
+
+```typescript
+interface AnalyticsState {
+  overview: OverviewStats | null;
+  timeSeries: TimeSeriesPoint[];
+  categories: CategoryBreakdown[];
+  devices: DeviceBreakdown[];
+  topPages: TopPage[];
+  loading: boolean;
+  error: string | null;
+}
+
+const initialState: AnalyticsState = {
+  overview: null,
+  timeSeries: [],
+  categories: [],
+  devices: [],
+  topPages: [],
+  loading: false,
+  error: null,
+};
+```
+
+- Each chart has its own field. Arrays start empty `[]`; the single overview object starts `null` (we don't have data until we fetch it).
+- `loading` and `error` are global to this slice — used by the UI to show a spinner or error banner.
+
+#### Chunk 2: Async Thunks
+
+```typescript
+export const fetchOverview = createAsyncThunk(
+  'analytics/fetchOverview',
+  async (filters: AnalyticsFilters) => {
+    return api.getOverview(filters);
+  }
+);
+```
+
+- `createAsyncThunk(typePrefix, asyncFn)` — RTK helper that wraps an async function.
+- `'analytics/fetchOverview'` is the action type prefix. RTK generates three real action types from it: `analytics/fetchOverview/pending`, `analytics/fetchOverview/fulfilled`, and `analytics/fetchOverview/rejected`.
+- The async function takes one argument (`filters`) and returns whatever `api.getOverview(filters)` resolves to. RTK puts that value in the `fulfilled` action's `payload`.
+- Dispatching: `dispatch(fetchOverview({ category: 'marketing' }))`. Components don't dispatch the pending/fulfilled/rejected actions directly — RTK does it automatically based on the promise's state.
+
+```typescript
+export const fetchAllAnalytics = createAsyncThunk(
+  'analytics/fetchAll',
+  async (filters: AnalyticsFilters, { dispatch }) => {
+    await Promise.all([
+      dispatch(fetchOverview(filters)),
+      dispatch(fetchTimeSeries(filters)),
+      dispatch(fetchCategories(filters)),
+      dispatch(fetchDevices(filters)),
+      dispatch(fetchTopPages(filters)),
+    ]);
+  }
+);
+```
+
+- A thunk's async function takes a **second argument**, an options object. Destructuring `{ dispatch }` gives us the dispatch function so this thunk can dispatch other thunks.
+- `Promise.all([...])` runs all five thunks concurrently. Each one returns a promise; `Promise.all` resolves when **all** of them resolve. Five API calls happen in parallel, not one-after-another.
+- We `await` the `Promise.all`, so this thunk's `fulfilled` action only fires after every child thunk has completed.
+
+#### Chunk 3: The Slice and `extraReducers`
+
+```typescript
+const analyticsSlice = createSlice({
+  name: 'analytics',
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchOverview.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchOverview.fulfilled, (state, action) => {
+        state.overview = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchOverview.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to fetch overview';
+      });
+    // ... more cases for the other thunks
+  },
+});
+```
+
+- `reducers: {}` — empty because this slice has no synchronous actions; everything is driven by thunks.
+- `extraReducers: (builder) => {...}` — used to handle actions defined **outside** this slice. RTK calls our function with a `builder` object that has an `.addCase(actionCreator, reducer)` method.
+- `fetchOverview.pending`, `fetchOverview.fulfilled`, `fetchOverview.rejected` — RTK attaches these three "child" action creators to every thunk. We pass them to `addCase` to wire up our handlers.
+- The chained `.addCase(...)` calls return the builder, so they read like a fluent API.
+
+Each handler:
+
+- `pending` — flip on `loading`, clear any previous `error`. Components reading these fields show a spinner.
+- `fulfilled` — store the payload, flip off `loading`. The payload is whatever the async function returned (so for `fetchOverview`, it's `OverviewStats`).
+- `rejected` — flip off `loading`, store the error message. `action.error` has `.message` and `.name`; we fall back to a generic string if message is somehow missing.
+
+Notice how only `fetchOverview` has all three cases here. The other thunks (`fetchTimeSeries`, etc.) only register a `fulfilled` case in this file — we just need to know when they finish so we can store the data. They share the global `loading` and `error` state via `fetchAllAnalytics` instead.
+
 ### How createAsyncThunk Works
 
 ```
@@ -540,6 +810,28 @@ export const selectEventsError = (state: RootState) => state.events.error;
 export default eventsSlice.reducer;
 ```
 
+### Reading This File — What's Different from analyticsSlice
+
+The events slice follows the same pattern as the analytics slice with three small differences worth calling out:
+
+- **The thunk takes an object argument**:
+  ```typescript
+  async ({ filters, page, limit }: { filters: AnalyticsFilters; page: number; limit: number; }) => {...}
+  ```
+  Thunks accept exactly one argument. When you need to pass multiple values, wrap them in an object and destructure inside. Dispatch like `dispatch(fetchEvents({ filters, page: 1, limit: 20 }))`.
+- **It has a synchronous reducer too**:
+  ```typescript
+  reducers: {
+    setPage(state, action: PayloadAction<number>) {
+      state.page = action.payload;
+    },
+  }
+  ```
+  When the user clicks the next-page button, we want an instant UI update before the API responds. Dispatching `setPage(2)` synchronously updates the UI; then a thunk fires to load page 2's data.
+- **The fulfilled handler unpacks a richer payload**: the API's response includes `total`, `page`, `limit`, and `total_pages` alongside the events array. Each becomes its own state field.
+
+Everything else (PayloadAction, addCase chain, selectors) follows the filters/analytics patterns.
+
 ---
 
 ## Step 5: API Service Layer
@@ -635,6 +927,77 @@ export async function getEvents(
 }
 ```
 
+### Reading This File Line-by-Line
+
+Three building blocks: a query-string helper, a generic fetch helper, and one-line API functions per endpoint.
+
+```typescript
+function buildQueryString(filters: AnalyticsFilters, extra?: Record<string, string | number>): string {
+  const params = new URLSearchParams();
+
+  if (filters.startDate) params.append('startDate', filters.startDate);
+  if (filters.endDate) params.append('endDate', filters.endDate);
+  if (filters.category) params.append('category', filters.category);
+  if (filters.device) params.append('device', filters.device);
+
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      params.append(key, String(value));
+    }
+  }
+
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+```
+
+- `URLSearchParams` is a **built-in browser API** for building query strings safely. No npm install needed.
+- `new URLSearchParams()` creates an empty container. `.append(key, value)` adds a key/value pair.
+- Each `if` block only appends a parameter if it has a value, so unset filters don't appear in the URL.
+- `extra?: Record<string, string | number>` — an **optional second argument** for endpoint-specific params (like pagination's `page` and `limit`). `Record<K, V>` is a TypeScript utility type meaning "object with K keys and V values."
+- `for (const [key, value] of Object.entries(extra))` walks the optional extras:
+  - `Object.entries(obj)` — built-in JavaScript that returns `[[key1, val1], [key2, val2], ...]`.
+  - `for (const [key, value] of array)` — destructure each pair as we iterate.
+- `String(value)` — explicit conversion to string. `URLSearchParams.append` requires strings; `String(5)` is `'5'`.
+- `params.toString()` — turns the params into the query-string text: `'startDate=2024-01-01&category=marketing'`.
+- The ternary at the end handles the empty case: if no params, return `''` instead of `'?'`. Clean URLs.
+
+```typescript
+async function fetchJSON<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+```
+
+This is a generic JSON-fetch helper, like the `request<T>` from Level 2 frontend. Same shape:
+
+- `<T>` makes it generic. The caller picks `T` and the return type follows.
+- Check `response.ok`. If not, try to parse the error body as JSON, falling back to a default if parsing fails.
+- `throw new Error(...)` with the server's error message (or a generic HTTP code if the server didn't provide one).
+- Return the parsed JSON on success.
+
+```typescript
+export async function getOverview(filters: AnalyticsFilters): Promise<OverviewStats> {
+  return fetchJSON<OverviewStats>(
+    `${API_URL}/analytics/overview${buildQueryString(filters)}`
+  );
+}
+```
+
+One-line wrapper per endpoint. Composes:
+
+- `${API_URL}` — base URL from env.
+- `/analytics/overview` — endpoint path.
+- `${buildQueryString(filters)}` — the query string we just built.
+
+The result is a properly-typed promise that resolves to `OverviewStats`. The thunk we wrote earlier just calls this and is done.
+
 ### Pattern: API → Thunk → Slice → Component
 
 ```
@@ -673,6 +1036,39 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 ```
+
+### Reading This File Line-by-Line
+
+```typescript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { Provider } from 'react-redux';
+import { store } from './app/store';
+import App from './App';
+import './App.css';
+```
+
+Standard imports plus two new ones:
+
+- `Provider` from `react-redux` — the React component that exposes the store to descendants.
+- `store` from our `./app/store` — the actual store instance.
+
+```typescript
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <Provider store={store}>
+      <App />
+    </Provider>
+  </React.StrictMode>
+);
+```
+
+- `document.getElementById('root')!` — the `!` is TypeScript's **non-null assertion**. We're saying "I'm sure this returns an element, not null." Because Vite ensures `<div id="root"></div>` exists in `index.html`, the assertion is safe. Without `!`, TypeScript would complain that `getElementById` could return `null`.
+- `<React.StrictMode>` — React's development helper that catches bugs by intentionally double-invoking effects. No production effect.
+- `<Provider store={store}>` — passes the store down through React's component tree. Any descendant can call `useAppSelector` or `useAppDispatch` to access it.
+- `<App />` — your real root component. Once Provider wraps it, every component inside has access to Redux.
+
+The order matters: `Provider` must wrap the components that use Redux. If `Provider` is below `App`, components above it would crash with "could not find Redux store."
 
 The `<Provider>` wraps the entire app, making the Redux store available to any component that uses `useAppSelector` or `useAppDispatch`.
 

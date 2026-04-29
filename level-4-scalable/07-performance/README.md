@@ -2,6 +2,20 @@
 
 # 07 — Performance: Optimization and Production Hardening
 
+## What's New: Performance Patterns
+
+Most of this lesson is small wraps and configurations on top of code you've already written. The handful of genuinely new shapes:
+
+- **`memo(Component)`** (from `react`) — wraps a component so React skips re-rendering when props haven't changed.
+- **`useMemo(fn, deps)`** — caches the **result** of an expensive calculation. Recomputes only when something in `deps` changes.
+- **`useCallback(fn, deps)`** — caches the **function itself**. Recomputes only when something in `deps` changes. Used to pass stable function references to memoized children.
+- **Class components** (`extends Component<Props, State>`) — the older React component style. Required for **error boundaries** because no hook exists for `componentDidCatch`. We'll see this once and never again.
+- **`getDerivedStateFromError`** and **`componentDidCatch`** — class-component lifecycle methods that React calls when a child component throws.
+- **TypeScript advanced generics** — `T extends (...args: unknown[]) => void` constrains a generic to "any function that takes any args and returns nothing." `Parameters<T>` extracts the parameter types of a function type. Used to type the `debounce` helper without losing type safety.
+- **`setTimeout` / `clearTimeout`** — built-in browser timers. `setTimeout(fn, ms)` schedules `fn` to run after `ms` milliseconds and returns a timer ID. `clearTimeout(id)` cancels a pending timer.
+
+Every code block below has a "Reading This File Line-by-Line" walkthrough.
+
 ## Spatial Orientation
 
 Performance optimization answers one question: **which renders are unnecessary, and how do we eliminate them?**
@@ -66,6 +80,16 @@ import { memo } from 'react';
 export default memo(TimeSeriesChart);
 ```
 
+### Reading This Pattern
+
+- `import { memo } from 'react';` — pull `memo` (a function) from React. Despite the historical name "React.memo", we just import the function directly.
+- `memo(TimeSeriesChart)` — wraps the component in a memoized version. Returns a new component that:
+  - On its first render, renders normally and remembers its props.
+  - On subsequent renders, **shallow-compares** the new props to the remembered ones. If every top-level prop is `===` to the previous one, React reuses the previous output and skips the function body entirely. If anything changed, it renders normally.
+- `export default memo(TimeSeriesChart);` — replace the default export with the wrapped version. Imports elsewhere are unchanged; consumers use the memoized one automatically.
+
+**Shallow comparison** means props are compared with `===`, not deeply inspected. So `{ a: 1 }` !== `{ a: 1 }` (different object instances). For memo to actually skip renders, parents must avoid creating new prop objects each render — which is why `useMemo` and `useCallback` exist.
+
 Do the same for `CategoryChart.tsx` and `DeviceChart.tsx`:
 
 ```typescript
@@ -128,6 +152,14 @@ const data = useMemo(
 );
 ```
 
+### Reading `useMemo` Line-by-Line
+
+- `useMemo(factoryFn, depsArray)` — React hook with two arguments.
+- The first argument is a **factory function** (`() => ...`). React calls it once on first render and caches the result.
+- The second argument is the **dependency array**. On every render, React shallow-compares each item to the previous render's array. If anything changed, React calls the factory again and updates the cache. If everything is the same, React returns the cached value without calling the factory.
+- Here, the factory does `timeSeries.map(...)` — building a new array of formatted points.
+- `[timeSeries]` is the deps. As long as `timeSeries` is the same array reference (which it is, until Redux updates the analytics slice), the factory doesn't re-run.
+
 The dependency array `[timeSeries]` tells React: "only recompute if `timeSeries` is a different array reference."
 
 ---
@@ -174,6 +206,14 @@ const handlePageChange = useCallback(
   [dispatch]
 );
 ```
+
+### Reading `useCallback`
+
+`useCallback(fn, deps)` and `useMemo(() => fn, deps)` are nearly equivalent. `useCallback(x, y)` is just a shortcut for `useMemo(() => x, y)` when the cached value is itself a function.
+
+- The arrow function `(page: number) => { dispatch(setPage(page)); }` is the function we want to remember.
+- `[dispatch]` — re-create the function only if `dispatch` changes. In Redux, `useAppDispatch` returns a stable reference, so `dispatch` never changes — meaning the callback is created exactly once.
+- The returned function is `===` to itself across renders. Memoized children that receive it as a prop see "same reference" and skip re-rendering.
 
 > [!NOTE]
 > **Technical:** JavaScript creates a new function object on every render. When a parent passes `onClick={handleClick}` to a `React.memo` child, the child sees a "new" prop and re-renders — even though the function does the same thing. `useCallback` returns the same function reference, so `React.memo` correctly skips the re-render.
@@ -235,6 +275,92 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 }
 ```
+
+### Reading This File Line-by-Line
+
+This is the only **class component** in the entire curriculum. Functional components don't have access to `componentDidCatch`, so we have no choice. Read carefully — the syntax is different from anything before.
+
+```typescript
+import { Component, ReactNode } from 'react';
+```
+
+`Component` is the base class for class components.
+
+```typescript
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+```
+
+Class components have **two** type parameters: a `Props` shape (data passed in) and a `State` shape (internal data). Each is an interface.
+
+```typescript
+export default class ErrorBoundary extends Component<Props, State> {
+```
+
+- `class ErrorBoundary` — declaring a class.
+- `extends Component<Props, State>` — inheriting from React's `Component` class. The `<Props, State>` is a **generic** specifying the type parameters: this component accepts `Props` and manages `State`.
+
+```typescript
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+```
+
+- `constructor(props)` — runs when the component is instantiated.
+- `super(props)` — call the parent class's constructor (`Component`). Required — JavaScript throws if you don't call `super` before accessing `this`.
+- `this.state = { ... }` — initialize the component's state. In class components, `state` is an object stored on the instance. (Functional components use `useState` instead.)
+
+```typescript
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+```
+
+- `static` — this method belongs to the class itself, not instances. React calls it directly on the class.
+- React calls this when a child throws during rendering. Whatever you return becomes the new state.
+- We return `{ hasError: true, error }` so the next render shows the fallback UI.
+
+```typescript
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.error('ErrorBoundary caught:', error, errorInfo);
+  }
+```
+
+- An instance method — runs on the component instance.
+- React calls this after `getDerivedStateFromError`, with extra info (component stack trace).
+- Used for **side effects** like logging or sending the error to an error-tracking service. Don't do state updates here — `getDerivedStateFromError` already did that.
+
+```typescript
+  render() {
+    if (this.state.hasError) {
+      return (
+        this.props.fallback || (
+          <div className="error-boundary">
+            <h3>Something went wrong</h3>
+            ...
+          </div>
+        )
+      );
+    }
+
+    return this.props.children;
+  }
+}
+```
+
+- `render()` is the class-component equivalent of the function body in a functional component.
+- `this.state` and `this.props` access the component's data.
+- If we caught an error, render either the user-provided `fallback` (if any) or the default error UI. The `||` falls back to the default when `fallback` is undefined.
+- Otherwise, render `this.props.children` — pass through whatever was wrapped.
+- The `Try Again` button calls `this.setState({ hasError: false, error: null })` to reset, attempting to re-render the children.
 
 > [!NOTE]
 > **Technical:** Error boundaries must be class components — there is no hook equivalent for `componentDidCatch`. This is one of the few cases where class components are still necessary in modern React. The error boundary catches errors during rendering, lifecycle methods, and constructors of child components.
@@ -331,6 +457,50 @@ export function debounce<T extends (...args: unknown[]) => void>(
 }
 ```
 
+### Reading This File Line-by-Line
+
+The most TypeScript-heavy snippet in Level 4. Let's unpack the type signature first, then the runtime behavior.
+
+```typescript
+export function debounce<T extends (...args: unknown[]) => void>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+```
+
+- `<T extends (...args: unknown[]) => void>` — generic type parameter `T` constrained to "any function that takes any args and returns nothing." `T` is whatever function the caller passes in.
+- `(...args: unknown[])` — **rest parameter syntax** in a type. Means "any number of arguments, of any types." `unknown` is TypeScript's "I don't know the type yet, force me to check before using."
+- `=> void` — the function returns nothing meaningful.
+- `fn: T` — the first runtime parameter, typed by the generic.
+- `delay: number` — milliseconds to wait.
+- `: (...args: Parameters<T>) => void` — the return type. `Parameters<T>` is a TypeScript utility that **extracts the parameter types of a function type**. So if `T` is `(s: string, n: number) => void`, then `Parameters<T>` is `[string, number]`. The returned function has the same parameter signature as the wrapped one.
+
+The whole declaration says: "give me any function plus a delay; I return a new function with the same signature."
+
+```typescript
+  let timeoutId: ReturnType<typeof setTimeout>;
+```
+
+- `setTimeout` returns a timer ID (a number in browsers, a `Timer` object in Node — different types in different environments).
+- `ReturnType<typeof setTimeout>` extracts whatever type `setTimeout` returns, automatically. Cross-platform safe.
+- `let timeoutId` — declared without an initial value because we set it later. TypeScript allows this because we always assign before reading.
+
+```typescript
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
+```
+
+The returned function is called every time the user triggers the debounced event:
+
+- `(...args: Parameters<T>)` — capture all arguments using rest syntax.
+- `clearTimeout(timeoutId)` — cancel any pending timer. If this is the first call, `timeoutId` is undefined and `clearTimeout(undefined)` is a no-op.
+- `timeoutId = setTimeout(() => fn(...args), delay)` — schedule a new timer. After `delay` ms, the inner arrow runs and calls `fn(...args)` with the most recent arguments.
+
+The clever part: every new call cancels the previous timer. So if the user clicks five times in 200ms with a 300ms delay, only the last click's timer ever fires.
+
 ### Apply Debouncing to Data Fetching
 
 Update `src/App.tsx` to debounce the analytics fetch:
@@ -352,6 +522,30 @@ useEffect(() => {
   debouncedFetch(filters);
 }, [debouncedFetch, filters]);
 ```
+
+### Reading the Debounced Fetch
+
+```typescript
+const debouncedFetch = useMemo(
+  () =>
+    debounce((filters: AnalyticsFilters) => {
+      dispatch(fetchAllAnalytics(filters));
+    }, 300),
+  [dispatch]
+);
+```
+
+- We're using `useMemo` to cache the debounced function across renders. **This matters.** If we wrote `const debouncedFetch = debounce(...)` directly, we'd build a new debounced function every render — each with its own internal `timeoutId`. The previous one's timer would still fire. Debouncing wouldn't actually work.
+- `useMemo` keeps the same debounced function across renders, so the same internal `timeoutId` is reused. Calls genuinely cancel each other.
+- `[dispatch]` — re-create only if `dispatch` changes (which it never does). One debounced function for the lifetime of the component.
+
+```typescript
+useEffect(() => {
+  debouncedFetch(filters);
+}, [debouncedFetch, filters]);
+```
+
+Same `useEffect` pattern as before, but calling the debounced version. When `filters` changes, this effect runs immediately — but the actual `dispatch(fetchAllAnalytics(filters))` is deferred 300ms.
 
 Now filter changes wait 300ms before fetching. If the user changes three filters in quick succession, only one API call fires.
 

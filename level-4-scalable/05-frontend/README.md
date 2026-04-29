@@ -2,6 +2,17 @@
 
 # 05 — Frontend: Dashboard Components with Recharts
 
+> **What you already know carries over.** JSX, hooks (`useState`, `useEffect`), controlled inputs, the `.map` pattern for lists — all from Level 1 Step 4 and Level 2 Step 5. Redux Toolkit's `useAppSelector`/`useAppDispatch` and slice patterns — from Step 4 of this level. If anything feels unfamiliar, those walkthroughs cover it.
+>
+> **What's new in Level 4 on the frontend:**
+> - **Recharts components** — `<LineChart>`, `<BarChart>`, `<PieChart>` and their building blocks (`<Line>`, `<Bar>`, `<Pie>`, `<Cell>`, `<XAxis>`, `<YAxis>`, `<CartesianGrid>`, `<Tooltip>`, `<Legend>`, `<ResponsiveContainer>`). Render-as-JSX charts.
+> - **Skeleton loading states** — render placeholder cards while data is loading, instead of nothing or a single spinner.
+> - **`useEffect` with multi-value dependencies** — refetching when several Redux selectors change.
+> - **The `children: ReactNode` prop pattern** — components that accept arbitrary nested JSX.
+> - **Controlled `<select>` dropdowns** that dispatch Redux actions instead of `setState`.
+>
+> Every code block below has a "Reading This File Line-by-Line" walkthrough.
+
 ## Spatial Orientation
 
 The frontend is a single-page dashboard with a sidebar for navigation and a main content area. The sidebar switches between the **Overview** view (cards + charts) and the **Events** view (filterable table). All data comes from the Redux store.
@@ -173,6 +184,53 @@ export default function Sidebar() {
 }
 ```
 
+### Reading Layout.tsx Line-by-Line
+
+```tsx
+interface LayoutProps {
+  children: ReactNode;
+}
+
+export default function Layout({ children }: LayoutProps) {
+  const collapsed = useAppSelector(selectSidebarCollapsed);
+
+  return (
+    <div className={`layout ${collapsed ? 'layout--collapsed' : ''}`}>
+      <Sidebar />
+      <main className="main-content">
+        {children}
+      </main>
+    </div>
+  );
+}
+```
+
+- `children: ReactNode` — the **children prop pattern**. Any component using `<Layout>...stuff...</Layout>` automatically passes the nested JSX as the `children` prop. `ReactNode` is a TypeScript type meaning "anything React can render" — JSX elements, strings, numbers, fragments, arrays, even `null`.
+- We pull `children` out of props by destructuring.
+- `useAppSelector(selectSidebarCollapsed)` reads one boolean from Redux. The component re-renders only when this specific value changes (Redux's selective subscription).
+- `\`layout ${collapsed ? 'layout--collapsed' : ''}\`` — template literal building a dynamic class string. When collapsed, an extra modifier class is added. CSS keys off it.
+- `{children}` inside `<main>` — render whatever was passed in. The Layout doesn't know or care what the children are; it just provides a frame around them.
+
+### Reading Sidebar.tsx Line-by-Line
+
+```tsx
+const dispatch = useAppDispatch();
+const activeView = useAppSelector(selectActiveView);
+```
+
+Two hooks — the standard Redux duo. `useAppDispatch` to send actions; `useAppSelector` to read state.
+
+```tsx
+<button
+  className={`nav-item ${activeView === 'overview' ? 'nav-item--active' : ''}`}
+  onClick={() => dispatch(setActiveView('overview'))}
+>
+```
+
+- The button's `className` adds `'nav-item--active'` when this view is the active one. Triple-equality compares strings; it's `true` when `activeView` matches.
+- `onClick={() => dispatch(setActiveView('overview'))}` — arrow function that dispatches an action. This is the heart of "Redux instead of setState": instead of a local `setActiveView` from `useState`, we call the dispatch function with an action creator's result.
+- `aria-label="Toggle sidebar"` (on the toggle button above) is an accessibility attribute — screen readers announce it. Always add `aria-label` to icon-only buttons.
+
 Notice: the sidebar dispatches Redux actions instead of managing local state. This means any component in the app can read `selectActiveView` to know which view is active.
 
 ---
@@ -280,6 +338,81 @@ export default function FilterBar() {
 }
 ```
 
+### Reading This File Line-by-Line
+
+```tsx
+function getDateRange(days: number): { startDate: string; endDate: string } {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  return {
+    startDate: start.toISOString().split('T')[0],
+    endDate: end.toISOString().split('T')[0],
+  };
+}
+```
+
+A pure helper outside the component (no React state or hooks needed).
+
+- `new Date()` — JavaScript's built-in date object, defaulting to "right now."
+- `start.setDate(start.getDate() - days)` — `getDate()` returns the day-of-month (1–31); subtracting `days` and passing back to `setDate()` shifts the date that many days into the past. JavaScript automatically handles month/year rollover (Jan 5 minus 10 days = Dec 26).
+- `start.toISOString()` returns a string like `"2025-01-15T14:32:00.000Z"`. We split on `'T'` and take `[0]` to get just `"2025-01-15"` — the format our backend expects.
+- Returns a plain object with both dates. Action creators like `setDateRange` accept this shape directly.
+
+```tsx
+export default function FilterBar() {
+  const dispatch = useAppDispatch();
+  const filters = useAppSelector(selectFilters);
+  const hasFilters = useAppSelector(selectHasActiveFilters);
+```
+
+Standard Redux hooks — read filters and a derived boolean.
+
+```tsx
+<button
+  className="filter-btn"
+  onClick={() => dispatch(setDateRange(getDateRange(30)))}
+>
+  30d
+</button>
+```
+
+Click → call helper → wrap in action creator → dispatch. Nothing local; the change goes through Redux and any component reading `selectFilters` updates automatically.
+
+```tsx
+<select
+  className="filter-select"
+  value={filters.category || ''}
+  onChange={(e) =>
+    dispatch(setCategory(e.target.value || null))
+  }
+>
+  <option value="">All Categories</option>
+  <option value="marketing">Marketing</option>
+  ...
+</select>
+```
+
+A **controlled `<select>` dropdown** that dispatches Redux instead of using local state.
+
+- `value={filters.category || ''}` — fall back to empty string when category is null. HTML `<select>` requires a string value, not null.
+- `onChange={(e) => dispatch(setCategory(e.target.value || null))}` — when the user picks an option, take the new value. If it's an empty string ("All Categories"), convert back to `null` (our Redux convention for "no filter"). If it's a real category name, pass it through.
+- Each `<option>` has `value={...}` (sent to onChange when selected) and inner text (shown to user). The empty-string option is the "no filter" choice.
+
+```tsx
+{hasFilters && (
+  <button
+    className="filter-clear"
+    onClick={() => dispatch(clearFilters())}
+  >
+    Clear Filters
+  </button>
+)}
+```
+
+- `{hasFilters && <button>...</button>}` — conditional rendering. When `hasFilters` is `true`, render the button; when `false`, the expression evaluates to `false` and React renders nothing.
+- `dispatch(clearFilters())` — fires the action with no payload. The reducer resets all four filter fields to null.
+
 The FilterBar only dispatches actions — it doesn't make API calls. The App component listens for filter changes and triggers data fetching. This separation keeps the FilterBar simple and testable.
 
 ---
@@ -357,6 +490,63 @@ export default function OverviewCards() {
   );
 }
 ```
+
+### Reading This File Line-by-Line
+
+```tsx
+interface StatCardProps {
+  title: string;
+  value: string;
+  subtitle: string;
+}
+
+function StatCard({ title, value, subtitle }: StatCardProps) {
+  return (
+    <div className="stat-card">
+      <h3 className="stat-card-title">{title}</h3>
+      <p className="stat-card-value">{value}</p>
+      <p className="stat-card-subtitle">{subtitle}</p>
+    </div>
+  );
+}
+```
+
+A **private subcomponent**. `StatCard` is defined in the same file but not exported — only `OverviewCards` (the file's default export) uses it. This is a common pattern: keep small presentational helpers next to the component that uses them.
+
+```tsx
+const overview = useAppSelector(selectOverview);
+const loading = useAppSelector(selectAnalyticsLoading);
+
+if (loading && !overview) {
+  return (
+    <div className="overview-cards">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="stat-card stat-card--skeleton" />
+      ))}
+    </div>
+  );
+}
+
+if (!overview) return null;
+```
+
+Three rendering states handled by two early returns:
+
+1. **First load** (`loading && !overview`) — show four skeleton placeholders. `[1, 2, 3, 4].map(i => ...)` is a quick way to render N copies of an element. CSS animates these (typically a shimmer or pulse).
+2. **No data** (`!overview`) — return `null`, render nothing. Defensive against a state where loading is false but the data is still missing.
+3. **Has data** — fall through to the real markup below.
+
+The pattern of "loading AND no previous data = skeleton; otherwise show stale data while refetching" is called **stale-while-revalidate**. It avoids flickering when filters change — the user sees the old numbers continuously, then they update once new data arrives.
+
+```tsx
+<StatCard
+  title="Page Views"
+  value={formatNumber(overview.total_page_views)}
+  subtitle="Total page views"
+/>
+```
+
+Pass formatted strings via props. The card itself doesn't know about formatting — the parent decides. Same pattern for revenue (formatCurrency) and avg session (formatDuration).
 
 Notice the loading state: when data is loading AND there's no previous data, show skeleton cards. This prevents a flash of empty content. When data is loading but we have previous data, keep showing the old data (it will update seamlessly).
 
@@ -442,7 +632,84 @@ export default function TimeSeriesChart() {
 }
 ```
 
-Key Recharts concepts:
+### Reading TimeSeriesChart Line-by-Line
+
+Recharts is **declarative** — you describe what you want by composing React components, and Recharts handles the SVG drawing.
+
+```tsx
+const data = timeSeries.map((point) => ({
+  ...point,
+  label: formatDate(point.date),
+}));
+```
+
+- `.map(...)` transforms each point. We **spread** the original point's fields (`...point`) into a new object and add a `label` field. Now each row has both `date` (raw ISO) and `label` (`"Jan 15"`).
+- Why? The chart's X-axis shows `label`; tooltips can use `date` for precision. Both live on the same row.
+
+```tsx
+<ResponsiveContainer width="100%" height={300}>
+  <LineChart data={data}>
+```
+
+- `<ResponsiveContainer>` is Recharts' "fill the parent" wrapper. The chart resizes when the window does. Required for any responsive layout.
+- `<LineChart data={data}>` — pass the entire array via `data`. Recharts' children automatically read from this prop.
+
+```tsx
+<CartesianGrid strokeDasharray="3 3" stroke="#333" />
+```
+
+- Background grid lines. `strokeDasharray="3 3"` = 3px dash, 3px gap (dotted look). `stroke` is the line color.
+
+```tsx
+<XAxis
+  dataKey="label"
+  stroke="#888"
+  tick={{ fontSize: 12 }}
+  interval="preserveStartEnd"
+/>
+<YAxis stroke="#888" tick={{ fontSize: 12 }} />
+```
+
+- `dataKey="label"` tells the X-axis which field of each row to display.
+- `tick={{ fontSize: 12 }}` styles the axis labels — passed as a JS object containing SVG attributes.
+- `interval="preserveStartEnd"` — when there are too many data points to fit, Recharts auto-skips ticks but always keeps the first and last labels visible.
+- The Y-axis has no `dataKey` because Recharts derives its scale from the `<Line>` series below.
+
+```tsx
+<Tooltip
+  contentStyle={{
+    backgroundColor: '#1e1e2e',
+    border: '1px solid #333',
+    borderRadius: '8px',
+  }}
+/>
+<Legend />
+```
+
+- `<Tooltip>` shows the data values when the user hovers. `contentStyle` is the inline style for the tooltip's container.
+- `<Legend>` shows which color represents which line, automatically generated from each `<Line>`'s `name` prop.
+
+```tsx
+<Line
+  type="monotone"
+  dataKey="page_views"
+  name="Page Views"
+  stroke="#6366f1"
+  strokeWidth={2}
+  dot={false}
+  activeDot={{ r: 4 }}
+/>
+```
+
+- One `<Line>` per data series. We have two — one for page views, one for signups.
+- `type="monotone"` — smooth curve interpolation. Other options: `"linear"` (sharp angles), `"step"` (staircase).
+- `dataKey="page_views"` — the field on each row to plot.
+- `name="Page Views"` — what shows in the legend and tooltip.
+- `stroke` — line color. `strokeWidth={2}` — thickness in pixels.
+- `dot={false}` — hide the small circle at each data point. Cleaner with many points.
+- `activeDot={{ r: 4 }}` — when the user hovers, show a 4px-radius circle on the active point.
+
+Recharts components quick reference:
 
 | Component | Purpose |
 |-----------|---------|
@@ -505,6 +772,14 @@ export default function CategoryChart() {
   );
 }
 ```
+
+### Reading CategoryChart — What's Different
+
+Same shape as TimeSeriesChart with three changes:
+
+- `<BarChart>` instead of `<LineChart>` and `<Bar>` instead of `<Line>`. Recharts swaps in the right SVG primitives.
+- `dataKey="category"` on the X-axis — the bar labels come from the `category` field on each row.
+- `<Bar>` uses `fill` (interior color) instead of `stroke` (line color). `radius={[4, 4, 0, 0]}` rounds the top corners only — `[topLeft, topRight, bottomRight, bottomLeft]`.
 
 ### Device Chart (Pie Chart)
 
@@ -571,6 +846,48 @@ export default function DeviceChart() {
   );
 }
 ```
+
+### Reading DeviceChart — What's New
+
+```tsx
+const COLORS = ['#6366f1', '#22c55e', '#f59e0b'];
+```
+
+Module-level constant array of three hex colors. One per slice (we have three devices: desktop, mobile, tablet).
+
+```tsx
+const data = devices.map((d) => ({
+  name: d.device,
+  value: d.count,
+  percentage: formatPercentage(d.percentage),
+}));
+```
+
+Reshape into the three fields a Recharts pie expects: `name`, `value`, plus our extra `percentage` for the label.
+
+```tsx
+<Pie
+  data={data}
+  cx="50%"
+  cy="50%"
+  innerRadius={50}
+  outerRadius={80}
+  paddingAngle={3}
+  dataKey="value"
+  label={({ name, percentage }) => `${name} ${percentage}`}
+>
+  {data.map((_, index) => (
+    <Cell key={index} fill={COLORS[index % COLORS.length]} />
+  ))}
+</Pie>
+```
+
+- `cx="50%"`, `cy="50%"` — center of the pie. Percent values are relative to the chart container.
+- `innerRadius={50}` and `outerRadius={80}` — having a non-zero inner radius makes a **donut chart** instead of a solid pie.
+- `paddingAngle={3}` — gap (in degrees) between slices.
+- `label={({ name, percentage }) => \`${name} ${percentage}\`}` — a function that returns the label string for each slice. Recharts passes the slice's data; we destructure `name` and `percentage`.
+- `{data.map((_, index) => <Cell ... />)}` — `<Cell>` lets us assign a different color per slice. The underscore `_` means "I'm not using the first parameter (the data point)" — only `index` matters here.
+- `COLORS[index % COLORS.length]` — modulo wraps around safely. If we had 5 slices and 3 colors, slice 4 would reuse color 1 (`4 % 3 = 1`).
 
 ---
 
@@ -688,6 +1005,74 @@ export default function EventsTable() {
 }
 ```
 
+### Reading This File Line-by-Line
+
+```tsx
+const dispatch = useAppDispatch();
+const events = useAppSelector(selectEvents);
+const page = useAppSelector(selectEventsPage);
+const totalPages = useAppSelector(selectEventsTotalPages);
+const total = useAppSelector(selectEventsTotal);
+const loading = useAppSelector(selectEventsLoading);
+const filters = useAppSelector(selectActiveFilters);
+```
+
+Six pieces pulled from Redux — six independent subscriptions. Each `useAppSelector` re-renders this component only when its specific value changes. So toggling a filter triggers a refetch but doesn't re-render if the events haven't arrived yet.
+
+```tsx
+useEffect(() => {
+  dispatch(fetchEvents({ filters, page, limit: 20 }));
+}, [dispatch, filters, page]);
+```
+
+A **multi-dependency `useEffect`**. The dependency array `[dispatch, filters, page]` tells React: "re-run this effect any time any of these values changes."
+
+- On **mount** — the effect runs once with the initial filters and page.
+- When the **page** changes (user clicks Next) — it runs again with the new page.
+- When **filters** change (user picks a date range) — it runs again with the new filters.
+- `dispatch` is included for correctness (lint rule). It's stable across renders, so it never actually causes a refetch.
+
+This is how Redux state drives data fetching: the component watches the store and refetches whenever inputs change. No manual "after I dispatch X, also dispatch Y" logic needed.
+
+```tsx
+{loading && events.length === 0 ? (
+  <div className="events-loading">Loading events...</div>
+) : (
+  <>
+    <table className="events-table">...</table>
+    <div className="pagination">...</div>
+  </>
+)}
+```
+
+Same stale-while-revalidate pattern. Show "Loading events..." only on first load (loading AND empty events). When events exist, keep showing them while a new request is in flight.
+
+```tsx
+{events.map((event) => (
+  <tr key={event.id}>
+    ...
+    <td>
+      {event.value > 0 ? `$${event.value}` : '—'}
+    </td>
+    ...
+  </tr>
+))}
+```
+
+Standard `.map` pattern. The ternary `event.value > 0 ? \`$${event.value}\` : '—'` shows a dollar amount for purchases and an em-dash placeholder for everything else.
+
+```tsx
+<button
+  className="pagination-btn"
+  disabled={page <= 1}
+  onClick={() => dispatch(setPage(page - 1))}
+>
+  Previous
+</button>
+```
+
+`disabled={page <= 1}` — the button greys out when there's no previous page. `onClick` dispatches `setPage(page - 1)`, the synchronous Redux action that updates the page number. The change in the page number triggers our `useEffect` to fetch the new page's data.
+
 The EventsTable uses `useEffect` to fetch data whenever `page` or `filters` change. The dependency array `[dispatch, filters, page]` ensures refetching when navigation or filtering occurs.
 
 ---
@@ -747,6 +1132,37 @@ export default function App() {
 }
 ```
 
+### Reading This File Line-by-Line
+
+```tsx
+useEffect(() => {
+  dispatch(fetchAllAnalytics(filters));
+}, [dispatch, filters]);
+```
+
+The **single source of truth** for the dashboard's data flow. Whenever the active filters change in Redux, this effect refetches all analytics. Because `fetchAllAnalytics` is the parallel thunk you wrote in Step 4, all five charts update simultaneously.
+
+```tsx
+{activeView === 'overview' && (
+  <>
+    <OverviewCards />
+    <TimeSeriesChart />
+    <div className="charts-row">
+      <CategoryChart />
+      <DeviceChart />
+    </div>
+  </>
+)}
+
+{activeView === 'events' && <EventsTable />}
+```
+
+Two **conditional renders** based on `activeView`:
+
+- `condition && <Component />` — when condition is true, render the component; otherwise nothing.
+- `<>...</>` — a **React fragment**. Lets us return multiple sibling elements from the conditional without adding an extra `<div>` to the DOM.
+- The two ternaries are mutually exclusive — only one block renders at any time, depending on which view the user clicked in the sidebar.
+
 The App component is thin — it only orchestrates:
 
 1. **Fetches data** when filters change (via `useEffect`)
@@ -758,6 +1174,8 @@ The App component is thin — it only orchestrates:
 ## Step 8: Styles
 
 Replace `src/App.css` with the complete dashboard styles:
+
+> **Already comfortable with CSS?** Skim this for the new techniques: `position: fixed`, `display: grid`, `grid-template-columns`, `flex-direction`, transitions, BEM-style modifier classes (`.layout--collapsed`). If CSS basics still feel new, see Level 1 Step 4's "How to Read This CSS" primer — it covers selectors, properties, units, and colors.
 
 ```css
 /* --- Reset & Base --- */

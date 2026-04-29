@@ -150,6 +150,14 @@ psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
 DATABASE_URL="YOUR_SUPABASE_CONNECTION_STRING" npx tsx server/src/db/seed.ts
 ```
 
+**Reading these two commands:**
+
+- The first line is the same `psql ... < file` pattern from Levels 2 and 3 — pipe the schema SQL into a remote database. Creates tables and indexes.
+- The second line is new and does three things at once:
+  - `DATABASE_URL="..."` — set an environment variable **for this single command only**. It overrides whatever's in your local `.env` for this one execution. The variable scope ends when the command finishes.
+  - `npx tsx server/src/db/seed.ts` — run the seed script using `tsx` (no install needed because `npx` fetches it on the fly). The seed script reads `process.env.DATABASE_URL`, sees the production URL we set, and inserts ~5400 rows of analytics events into the cloud database.
+  - This is how you **populate production** without deploying: run the seed once locally, pointed at the production database. Subsequent deploys never re-seed.
+
 ### Option B: Neon (Serverless PostgreSQL)
 
 1. Go to [neon.tech](https://neon.tech) → **Create Project**: `datadash`
