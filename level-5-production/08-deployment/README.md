@@ -129,59 +129,63 @@ If both jobs pass, you'll see green checkmarks. If either fails, check the logs 
 
 ## Step 4: Deploy the Database
 
+### Provider Strategy Across the Curriculum
+
+Each level uses a **different free Postgres provider** so your portfolio shows variety and you don't exhaust any single provider's free tier:
+
+| Level | Provider | Why this provider for this level |
+|-------|----------|----------------------------------|
+| Level 2 — TaskForge | Supabase | Beginner-friendly dashboard |
+| Level 3 — VaultNote | Neon | Serverless Postgres with branching |
+| Level 4 — DataDash | Render | Standard managed Postgres — your one allowed Render free DB |
+| **Level 5 — CollabBoard** | **CockroachDB Serverless** ◀ this lesson | Distributed, Postgres-compatible — production-grade capstone feel |
+
+> [!IMPORTANT]
+> **Render's one free Postgres slot is spent on Level 4** (its 90-day expiration is fine for purely synthetic analytics data). For the capstone, we use **CockroachDB Serverless** — a distributed Postgres-compatible database with a free tier that doesn't expire, making it a better long-term portfolio anchor.
+
+### Deploy on CockroachDB Serverless
+
+1. Go to [cockroachlabs.cloud](https://cockroachlabs.cloud) and sign up
+2. Click **Create Cluster** → choose **Serverless** plan (Free tier)
+3. Name the cluster `collabboard-cluster`. Pick a region near you.
+4. After provisioning (1–2 minutes), click **Connect** in the cluster dashboard
+5. Choose **General connection string**. Create a SQL user when prompted (save the password!).
+6. Copy the connection string. It looks like:
+   ```
+   postgresql://your-user:your-password@cluster-xyz-123.j77.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full
+   ```
+7. Run the schema and seed:
+
+```bash
+psql "YOUR_COCKROACH_CONNECTION_STRING" < server/src/db/schema.sql
+DATABASE_URL="YOUR_COCKROACH_CONNECTION_STRING" npx tsx server/src/db/seed.ts
+```
+
+**Reading these two commands:**
+
+- The first line pipes `schema.sql` into psql against the remote CockroachDB cluster. CockroachDB speaks the Postgres wire protocol, so your existing schema (`SERIAL PRIMARY KEY`, `REFERENCES ... ON DELETE CASCADE`, `UNIQUE(...)` composite constraints, etc.) runs unchanged. Same with `json_agg` and `json_build_object` — both supported.
+- The second line uses the same `DATABASE_URL=... npx tsx ...` pattern from Level 4: set the env var for one command, run the seed script. The `pg` Node driver works against CockroachDB without changes.
+
+**About CockroachDB's connection string:**
+
+- **Port 26257** instead of Postgres's usual 5432. CockroachDB picks a different default to avoid clashing with vanilla Postgres on the same host.
+- **`sslmode=verify-full`** is mandatory. CockroachDB Serverless rejects unencrypted connections.
+- The `pg` driver in your backend handles SSL automatically when the URL includes `sslmode=...`.
+
+Verify:
+```bash
+psql "YOUR_COCKROACH_CONNECTION_STRING" -c "\dt"
+```
+
+You should see all six tables (`users`, `boards`, `board_members`, `lists`, `cards`, `comments`).
+
+Expected seed output: `3 users, 2 boards, 7 lists, 12 cards, 5 comments created.`
+
+> [!NOTE]
+> **If CockroachDB Serverless is unavailable for any reason**, the same schema and seed deploy identically to **Supabase** (your second free project) or **Neon** (your second free project). Just substitute the connection string. **Do not** use Render here — that slot is reserved for Level 4.
+
 > [!WARNING]
-> **Render's free PostgreSQL has a 90-day expiration and only 1 free database per account.** If you already used it for Level 2, 3, or 4, choose Supabase or Neon instead.
-
-### Option A: Neon (Recommended for Level 5)
-
-1. Go to [neon.tech](https://neon.tech) → **Create Project**: `collabboard`
-2. Copy the connection string
-3. Run schema and seed:
-
-```bash
-psql "YOUR_NEON_CONNECTION_STRING" < server/src/db/schema.sql
-DATABASE_URL="YOUR_NEON_CONNECTION_STRING" npx tsx server/src/db/seed.ts
-```
-
-### Option B: Supabase
-
-1. Go to [supabase.com](https://supabase.com) → **New Project**
-2. Name: `collabboard`, set a database password, choose a region
-3. Go to **Project Settings** → **Database** → **Connection string** → **URI**
-4. Run schema and seed:
-
-```bash
-psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
-DATABASE_URL="YOUR_SUPABASE_CONNECTION_STRING" npx tsx server/src/db/seed.ts
-```
-
-### Option C: Render PostgreSQL
-
-> Only use if you haven't used your free Render database for a previous level.
-
-1. Go to [render.com](https://render.com) → **"New"** → **"PostgreSQL"**
-2. Configure: Name: `collabboard-db`, Database: `collabboard`, Plan: Free
-3. Copy both the **Internal** and **External** Database URLs
-4. Run schema and seed using the **External** URL:
-
-```bash
-psql "YOUR_EXTERNAL_DATABASE_URL" < server/src/db/schema.sql
-DATABASE_URL="YOUR_EXTERNAL_DATABASE_URL" npx tsx server/src/db/seed.ts
-```
-
-> [!WARNING]
-> **Use the External URL** for the seed command — you're connecting from your local machine. The Internal URL only works between Render services.
-
-### Portfolio Strategy
-
-| Level | Database Provider | Reason |
-|-------|------------------|--------|
-| Level 2 — TaskForge | Supabase | 2 free projects |
-| Level 3 — VaultNote | Neon | Free serverless PostgreSQL |
-| Level 4 — DataDash | Supabase (2nd project) | Or Render if unused |
-| Level 5 — CollabBoard | Neon (2nd project) | Or Render if unused |
-
-Expected: 3 users, 2 boards, 7 lists, 12 cards, 5 comments created.
+> **CockroachDB note on `SERIAL`:** The schema uses `SERIAL PRIMARY KEY`. CockroachDB supports `SERIAL` but generates 64-bit random IDs (not the sequential 1, 2, 3 you see locally on Postgres). The seed script uses `RETURNING *` to capture each new ID, so it doesn't care about the values — but the IDs you see in the production DB will be large numbers. This is expected and doesn't affect the app.
 
 ---
 
@@ -200,7 +204,7 @@ Expected: 3 users, 2 boards, 7 lists, 12 cards, 5 comments created.
 
 | Key | Value |
 |-----|-------|
-| `DATABASE_URL` | (Internal Database URL from Render) |
+| `DATABASE_URL` | Your CockroachDB Serverless connection string (the same one you used to seed) |
 | `CORS_ORIGIN` | `https://collab-board-xxxxx.vercel.app` (after step 6) |
 | `JWT_SECRET` | (generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
 | `JWT_EXPIRES_IN` | `7d` |

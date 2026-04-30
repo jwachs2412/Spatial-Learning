@@ -135,67 +135,51 @@ git push -u origin main
 
 ## Step 4: Deploy the Database
 
-> [!WARNING]
-> **Render's free PostgreSQL has a 90-day expiration and only 1 free database per account.** If you already used it for Level 2 or Level 3, choose Supabase or Neon instead.
+### Provider Strategy Across the Curriculum
 
-### Option A: Supabase (Recommended)
+Each level uses a **different free Postgres provider** so your portfolio shows variety and you don't exhaust any single provider's free tier:
 
-1. Go to [supabase.com](https://supabase.com) → **New Project**
-2. Name: `datadash`, set a database password, choose a region
-3. Go to **Project Settings** → **Database** → **Connection string** → **URI**
-4. Run schema and seed:
+| Level | Provider | Why this provider for this level |
+|-------|----------|----------------------------------|
+| Level 2 — TaskForge | Supabase | Beginner-friendly dashboard |
+| Level 3 — VaultNote | Neon | Serverless Postgres with branching |
+| **Level 4 — DataDash** | **Render** ◀ this lesson | Standard managed Postgres — your one allowed Render free DB |
+| Level 5 — CollabBoard | CockroachDB Serverless | Distributed, Postgres-compatible |
 
-```bash
-psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
-DATABASE_URL="YOUR_SUPABASE_CONNECTION_STRING" npx tsx server/src/db/seed.ts
-```
+> [!IMPORTANT]
+> **Level 4 is where you spend your one Render free PostgreSQL database.** Render allows only one free DB per account and it expires after 90 days, so we put it on the level whose data is purely synthetic (the seed script can rebuild it any time). The capstone in Level 5 deserves a longer-lived provider.
 
-**Reading these two commands:**
-
-- The first line is the same `psql ... < file` pattern from Levels 2 and 3 — pipe the schema SQL into a remote database. Creates tables and indexes.
-- The second line is new and does three things at once:
-  - `DATABASE_URL="..."` — set an environment variable **for this single command only**. It overrides whatever's in your local `.env` for this one execution. The variable scope ends when the command finishes.
-  - `npx tsx server/src/db/seed.ts` — run the seed script using `tsx` (no install needed because `npx` fetches it on the fly). The seed script reads `process.env.DATABASE_URL`, sees the production URL we set, and inserts ~5400 rows of analytics events into the cloud database.
-  - This is how you **populate production** without deploying: run the seed once locally, pointed at the production database. Subsequent deploys never re-seed.
-
-### Option B: Neon (Serverless PostgreSQL)
-
-1. Go to [neon.tech](https://neon.tech) → **Create Project**: `datadash`
-2. Copy the connection string
-3. Run schema and seed:
-
-```bash
-psql "YOUR_NEON_CONNECTION_STRING" < server/src/db/schema.sql
-DATABASE_URL="YOUR_NEON_CONNECTION_STRING" npx tsx server/src/db/seed.ts
-```
-
-### Option C: Render PostgreSQL
-
-> Only use if you haven't used your free Render database for a previous level.
+### Deploy on Render PostgreSQL
 
 1. Go to [render.com](https://render.com) → **"New"** → **"PostgreSQL"**
-2. Configure: Name: `datadash-db`, Database: `datadash`, Plan: Free
-3. Copy both the **Internal** and **External** Database URLs
-4. Run schema and seed using the **External** URL:
+2. Configure:
+   - **Name**: `datadash-db`
+   - **Database**: `datadash`
+   - **Plan**: Free
+3. Click **Create Database**. Provisioning takes 1–2 minutes.
+4. From the database's dashboard page, copy both the **Internal Database URL** (used by your backend service inside Render's network) and the **External Database URL** (used from your laptop to seed).
+5. Run schema and seed using the **External** URL:
 
 ```bash
 psql "YOUR_EXTERNAL_DATABASE_URL" < server/src/db/schema.sql
 DATABASE_URL="YOUR_EXTERNAL_DATABASE_URL" npx tsx server/src/db/seed.ts
 ```
 
+**Reading these two commands:**
+
+- The first line is the same `psql ... < file` pattern from Levels 2 and 3 — pipe the schema SQL into a remote database. Creates tables and indexes.
+- The second line does three things at once:
+  - `DATABASE_URL="..."` — set an environment variable **for this single command only**. It overrides whatever's in your local `.env` for this one execution. The variable scope ends when the command finishes.
+  - `npx tsx server/src/db/seed.ts` — run the seed script using `tsx` (no install needed because `npx` fetches it on the fly). The seed script reads `process.env.DATABASE_URL`, sees the production URL we set, and inserts ~5400 rows of analytics events into the cloud database.
+  - This is how you **populate production** without deploying: run the seed once locally, pointed at the production database. Subsequent deploys never re-seed.
+
 > [!WARNING]
-> **Use the External URL** for the seed command — you're connecting from your local machine. The Internal URL only works between Render services. After seeding, the backend will use the Internal URL for fast, private connections.
+> **Use the External URL for the seed command** — you're connecting from your local machine. The Internal URL only works between Render services. After seeding, the backend will use the Internal URL for fast, private connections.
 
 Expected output: `Seeded ~5400 events across 90 days.`
 
-### Portfolio Strategy
-
-| Level | Database Provider | Reason |
-|-------|------------------|--------|
-| Level 2 — TaskForge | Supabase | 2 free projects |
-| Level 3 — VaultNote | Neon | Free serverless PostgreSQL |
-| Level 4 — DataDash | Supabase (2nd project) | Or Render if unused |
-| Level 5 — CollabBoard | Neon (2nd project) | Or Render if unused |
+> [!NOTE]
+> **If you've already used your free Render Postgres elsewhere**, the same schema and seed commands work identically on **Supabase**, **Neon**, or **CockroachDB Serverless**. Pick whichever you haven't claimed yet — the rest of this lesson only changes by which connection string you paste in.
 
 ---
 

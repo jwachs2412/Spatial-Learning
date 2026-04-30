@@ -60,11 +60,20 @@ git push -u origin main
 
 ## 3. Deploy the Database
 
-You have several options. Choose based on your needs:
+### Provider Strategy Across the Curriculum
 
-### Option A: Supabase (Recommended)
+Each of the four database-using levels uses a **different free Postgres provider** so your portfolio shows experience with multiple platforms — and so you don't blow through any single provider's free-tier limits:
 
-> **Why Supabase?** You get 2 free PostgreSQL databases (500MB each). If you plan to build all 5 projects in this curriculum, Supabase gives you the most room. Plus, it has a beautiful dashboard for viewing your data.
+| Level | Provider | Why this provider for this level |
+|-------|----------|----------------------------------|
+| **Level 2 — TaskForge** | **Supabase** ◀ this lesson | Beginner-friendly dashboard; great first cloud Postgres |
+| Level 3 — VaultNote | Neon | Serverless Postgres with branching — good fit for auth |
+| Level 4 — DataDash | Render | Standard managed Postgres — your one allowed Render free DB |
+| Level 5 — CollabBoard | CockroachDB Serverless | Distributed, Postgres-compatible — production-grade capstone feel |
+
+> ⚠️ **Render only gives you ONE free PostgreSQL database per account, and it expires after 90 days.** We save that single slot for Level 4. For Level 2 (this lesson), use **Supabase**.
+
+### Deploy on Supabase
 
 1. Go to [supabase.com](https://supabase.com) and sign up
 2. Click **New Project**
@@ -83,7 +92,7 @@ psql "YOUR_SUPABASE_CONNECTION_STRING" < server/src/db/schema.sql
 - `psql "postgresql://..."` — when `psql` receives a full connection URL as its first argument, it connects over the internet to the remote database (instead of to a local one). The URL encodes host, port, username, password, and database name.
 - **Quote the URL** with double quotes. URLs often contain `@`, `?`, or `&` — characters your shell treats specially unless quoted.
 - `<` — shell input redirection: "pipe the contents of this file into psql as if I typed them." Same technique you used in Step 3, just pointed at a remote database now.
-- Result: every `CREATE TABLE` and `CREATE INDEX` in `schema.sql` runs against the Supabase (or Neon, or Render) database. You just set up your production schema.
+- Result: every `CREATE TABLE` and `CREATE INDEX` in `schema.sql` runs against the Supabase database. You just set up your production schema.
 
 Verify:
 ```bash
@@ -94,23 +103,8 @@ psql "YOUR_SUPABASE_CONNECTION_STRING" -c "\dt"
 
 You should see `projects` and `tasks` tables.
 
-### Option B: Neon
-
-1. Go to [neon.tech](https://neon.tech) and sign up
-2. Create a project named `taskforge`
-3. Copy the connection string from the dashboard
-4. Run the schema: `psql "YOUR_NEON_CONNECTION_STRING" < server/src/db/schema.sql`
-
-### Option C: Render PostgreSQL
-
-> ⚠️ **Limitation:** Render only allows **1 free PostgreSQL database** per account, and it **expires after 90 days**. If you plan to do all 5 levels, you'll run out. Consider Supabase or Neon instead.
-
-1. Go to [render.com](https://render.com) → **New** → **PostgreSQL**
-2. Name: `taskforge-db`
-3. Database: `taskforge`
-4. Select the free plan
-5. Note the **Internal Database URL** (for backend) and **External Database URL** (for running schema)
-6. Run the schema: `psql "EXTERNAL_URL" < server/src/db/schema.sql`
+> [!NOTE]
+> **If Supabase is unavailable for any reason** (region outage, sign-up issue, you've already used it elsewhere), the same schema deploys identically to **Neon**, **CockroachDB Serverless**, or **Render** — they all speak standard Postgres and accept `psql "URI" < schema.sql`. Just don't use Render here unless you've decided to skip Level 4's database deployment.
 
 ---
 
@@ -133,7 +127,7 @@ You should see `projects` and `tasks` tables.
 
 | Variable | Value |
 |----------|-------|
-| `DATABASE_URL` | Your database connection string (Internal URL if Render DB, full URL if Supabase/Neon) |
+| `DATABASE_URL` | Your Supabase connection string (the same one you used to seed) |
 | `CORS_ORIGIN` | `https://task-forge.vercel.app` (fill after frontend deploy) |
 | `NODE_ENV` | `production` |
 

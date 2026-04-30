@@ -41,24 +41,44 @@ gh repo create vault-note --public --source=. --remote=origin --push
 
 ## 3. Deploy the Database
 
-### Option A: Supabase (Recommended)
+### Provider Strategy Across the Curriculum
 
-> ⚠️ **If you used Supabase for Level 2**, you have 1 free project remaining. If you used Render for Level 2, you can use Supabase here.
+Each level uses a **different free Postgres provider** so your portfolio shows variety and you don't exhaust any single provider's free tier:
 
-1. Go to [supabase.com](https://supabase.com) → New Project
-2. Name: `vaultnote`, set a database password, choose a region
-3. Go to **Project Settings** → **Database** → **Connection string** → **URI**
-4. Run schema: `psql "YOUR_CONNECTION_STRING" < server/src/db/schema.sql`
+| Level | Provider | Why this provider for this level |
+|-------|----------|----------------------------------|
+| Level 2 — TaskForge | Supabase | Beginner-friendly dashboard |
+| **Level 3 — VaultNote** | **Neon** ◀ this lesson | Serverless Postgres with branching — good fit for auth |
+| Level 4 — DataDash | Render | Standard managed Postgres — your one allowed Render free DB |
+| Level 5 — CollabBoard | CockroachDB Serverless | Distributed, Postgres-compatible |
 
-### Option B: Neon
+> ⚠️ **Render only gives you ONE free PostgreSQL database per account, and it expires after 90 days.** We save that single slot for Level 4. For Level 3 (this lesson), use **Neon**.
 
-1. Go to [neon.tech](https://neon.tech) → Create Project: `vaultnote`
-2. Copy the connection string
-3. Run schema: `psql "YOUR_CONNECTION_STRING" < server/src/db/schema.sql`
+### Deploy on Neon
 
-### Option C: Render PostgreSQL
+1. Go to [neon.tech](https://neon.tech) and sign up
+2. Click **Create Project**
+3. Name: `vaultnote`. Pick the latest Postgres version. Choose a region close to you.
+4. After provisioning, the dashboard shows a **Connection string** field. Copy the full URI — it looks like: `postgresql://your-user:your-password@ep-cool-name-12345.us-east-2.aws.neon.tech/neondb?sslmode=require`
+5. Run the schema:
 
-> ⚠️ **Only 1 free database per account, 90-day expiration.** If you already used it for Level 2, choose Supabase or Neon.
+```bash
+psql "YOUR_NEON_CONNECTION_STRING" < server/src/db/schema.sql
+```
+
+**About Neon's connection strings:** Neon requires SSL, so you'll see `?sslmode=require` at the end of the URI. The `pg` driver in your backend respects this automatically. Quote the URL when passing it to `psql` — the `?` is shell-special.
+
+Verify:
+```bash
+psql "YOUR_NEON_CONNECTION_STRING" -c "\dt"
+```
+
+You should see `users` and `notes` tables.
+
+> [!NOTE]
+> **Why Neon for Level 3?** Neon offers **database branching** — you can spin up an isolated copy of your production database for testing auth flows or running migrations safely. We don't use branching in this lesson, but it's a feature worth seeing on your portfolio résumé.
+>
+> **If Neon is unavailable**, the same schema deploys identically to **Supabase** or **CockroachDB Serverless** — they all speak Postgres. Just don't use Render here unless you've decided to skip Level 4's database deployment.
 
 ---
 
